@@ -37,6 +37,9 @@
     "48": "icon48.png",
     "128": "icon128.png"
   },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  },
   "declarative_net_request": {
     "rule_resources": [{
       "id": "ruleset_1",

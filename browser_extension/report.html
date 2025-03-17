@@ -387,6 +387,32 @@
         <button id="search-button">搜索</button>
       </div>
       
+      <div class="statistics">
+        <h2>漏洞统计</h2>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <div class="stat-label">检测站点数</div>
+            <div class="stat-value" id="total-sites">0</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">总漏洞数</div>
+            <div class="stat-value" id="total-vulnerabilities">0</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">XSS漏洞</div>
+            <div class="stat-value" id="xss-count">0</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">SQL注入</div>
+            <div class="stat-value" id="sqli-count">0</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">CSRF漏洞</div>
+            <div class="stat-value" id="csrf-count">0</div>
+          </div>
+        </div>
+      </div>
+      
       <div class="controls">
         <div class="filters">
           <select id="filter-type">
@@ -394,41 +420,15 @@
             <option value="XSS">XSS</option>
             <option value="SQL Injection">SQL注入</option>
             <option value="CSRF">CSRF</option>
-            <option value="SSRF">SSRF</option>
-            <option value="XXE">XXE</option>
-            <option value="CORS Misconfiguration">CORS配置错误</option>
-            <option value="JWT Weakness">JWT弱点</option>
-            <option value="Open Redirect">开放重定向</option>
-            <option value="HTTP Parameter Pollution">HTTP参数污染</option>
-            <option value="Server-Side Template Injection">服务器端模板注入</option>
-            <option value="Sensitive Information Leakage">敏感信息泄露</option>
-            <option value="Insecure Headers">不安全的HTTP头部</option>
-            <option value="Directory Traversal">目录遍历</option>
+            <option value="Information Disclosure">信息泄露</option>
+            <option value="Insecure Headers">不安全的HTTP头</option>
           </select>
-          
-          <select id="filter-severity">
-            <option value="all">所有严重程度</option>
-            <option value="Critical">严重</option>
-            <option value="High">高危</option>
-            <option value="Medium">中危</option>
-            <option value="Low">低危</option>
-            <option value="Info">信息</option>
-          </select>
-          
           <select id="filter-domain">
             <option value="all">所有站点</option>
           </select>
         </div>
-        
         <div class="actions">
-          <div class="export-options">
-            <button id="export-button">导出报告</button>
-            <div class="export-dropdown">
-              <a href="#" id="export-html">HTML报告</a>
-              <a href="#" id="export-csv">CSV格式</a>
-              <a href="#" id="export-json">JSON格式</a>
-            </div>
-          </div>
+          <button id="export-report" class="secondary">导出报告</button>
           <button id="clear-data" class="danger">清空数据</button>
         </div>
       </div>

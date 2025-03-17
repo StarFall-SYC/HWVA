@@ -398,338 +398,163 @@
     <h2><img src="icon48.png" alt="Logo"> Humanoid Web Vulnerability Assistant</h2>
     
     <div class="tabs">
-      <div class="tab active" data-tab="scan">扫描</div>
-      <div class="tab" data-tab="batch">批量扫描</div>
-      <div class="tab" data-tab="behavior">行为模拟</div>
-      <div class="tab" data-tab="fingerprint">指纹保护</div>
-      <div class="tab" data-tab="settings">设置</div>
+      <div class="tab active" data-tab="single">单站点扫描</div>
+      <div class="tab" data-tab="multi">批量扫描</div>
+      <div class="tab" data-tab="advanced">高级设置</div>
+      <div class="tab" data-tab="results">检测结果</div>
     </div>
     
-    <!-- 扫描标签页 -->
-    <div class="tab-content active" id="scan-tab">
+    <!-- 单站点扫描模式 -->
+    <div class="tab-content active" id="single-mode">
+      <h3>单站点漏洞检测</h3>
+      
+      <!-- 表单内容 -->
       <div class="form-group">
-        <label for="target-url">目标URL</label>
+        <label for="target-url">目标网站URL</label>
         <input type="text" id="target-url" placeholder="https://example.com">
       </div>
       
       <div class="form-group">
-        <label for="scan-depth">扫描深度</label>
+        <label for="scan-depth">检测深度</label>
         <select id="scan-depth">
-          <option value="light">轻量 (仅首页)</option>
-          <option value="medium" selected>中等 (首页+直接链接)</option>
-          <option value="deep">深度 (全站扫描)</option>
+          <option value="light">轻度 (快速检测)</option>
+          <option value="medium" selected>中度 (平衡模式)</option>
+          <option value="deep">深度 (全面检测)</option>
         </select>
       </div>
       
       <div class="form-group">
         <label for="vulnerability-types">漏洞类型</label>
         <select id="vulnerability-types" multiple size="5">
-          <option value="xss" selected>XSS (跨站脚本)</option>
+          <option value="xss" selected>XSS</option>
           <option value="sqli" selected>SQL注入</option>
-          <option value="csrf" selected>CSRF (跨站请求伪造)</option>
-          <option value="ssrf" selected>SSRF (服务器端请求伪造)</option>
-          <option value="open-redirect" selected>开放重定向</option>
-          <option value="info-leak" selected>信息泄露</option>
-          <option value="xxe" selected>XXE (XML外部实体)</option>
-          <option value="cors" selected>CORS错误配置</option>
-          <option value="jwt" selected>JWT弱点</option>
+          <option value="csrf" selected>CSRF</option>
+          <option value="ssrf">SSRF</option>
+          <option value="xxe">XXE</option>
+          <option value="cors">CORS配置错误</option>
+          <option value="jwt">JWT弱点</option>
+          <option value="open-redirect">开放重定向</option>
         </select>
-        <small>按住Ctrl键可多选</small>
       </div>
       
       <button id="start-scan">开始扫描</button>
       <button id="view-report" class="secondary">查看检测报告</button>
+      <button id="export-csv" class="tertiary">导出CSV</button>
       
-      <div class="status" id="scan-status">
+      <div class="status" id="status-panel">
         <div id="status-text">准备扫描...</div>
+        <div id="current-target"></div>
         <div class="progress">
-          <div class="progress-bar" id="scan-progress"></div>
+          <div class="progress-bar" id="progress-bar" style="width: 0%"></div>
         </div>
       </div>
     </div>
     
-    <!-- 批量扫描标签页 -->
-    <div class="tab-content" id="batch-tab">
+    <!-- 批量扫描模式 -->
+    <div class="tab-content" id="multi-mode">
+      <h3>批量漏洞检测</h3>
+      
       <div class="form-group">
-        <label for="batch-urls">目标URL列表 (每行一个)</label>
-        <textarea id="batch-urls" placeholder="https://example1.com&#10;https://example2.com&#10;https://example3.com"></textarea>
+        <label for="multi-targets">目标网站列表 (每行一个URL)</label>
+        <textarea id="multi-targets" placeholder="https://example1.com&#10;https://example2.com&#10;https://example3.com"></textarea>
       </div>
       
       <div class="form-group">
-        <label for="batch-interval">站点间隔 (秒)</label>
-        <input type="number" id="batch-interval" value="60" min="30">
+        <label for="interval">站点间隔 (分钟)</label>
+        <input type="number" id="interval" min="1" max="60" value="5">
+        <p class="description">每个站点检测完成后的等待时间</p>
       </div>
       
       <div class="form-group">
-        <label for="batch-depth">扫描深度</label>
-        <select id="batch-depth">
-          <option value="light" selected>轻量 (仅首页)</option>
-          <option value="medium">中等 (首页+直接链接)</option>
-          <option value="deep">深度 (全站扫描)</option>
+        <label for="multi-scan-depth">检测深度</label>
+        <select id="multi-scan-depth">
+          <option value="light" selected>轻度 (快速检测)</option>
+          <option value="medium">中度 (平衡模式)</option>
+          <option value="deep">深度 (全面检测)</option>
         </select>
       </div>
       
-      <button id="start-batch">开始批量扫描</button>
-      
-      <div class="status" id="batch-status">
-        <div id="batch-status-text">准备批量扫描...</div>
-        <div class="progress">
-          <div class="progress-bar" id="batch-progress"></div>
-        </div>
-      </div>
+      <button id="start-multi-scan">开始批量扫描</button>
     </div>
     
-    <!-- 行为模拟标签页 -->
-    <div class="tab-content" id="behavior-tab">
-      <div class="form-group">
-        <label>人格类型</label>
-        <div class="personality-types">
-          <div class="personality-type" data-type="methodical">
-            <div class="icon">🧠</div>
-            <div class="name">条理型</div>
-          </div>
-          <div class="personality-type" data-type="impulsive">
-            <div class="icon">⚡</div>
-            <div class="name">冲动型</div>
-          </div>
-          <div class="personality-type active" data-type="thorough">
-            <div class="icon">🔍</div>
-            <div class="name">细致型</div>
-          </div>
-          <div class="personality-type" data-type="casual">
-            <div class="icon">🦋</div>
-            <div class="name">随意型</div>
-          </div>
-        </div>
+    <!-- 高级设置模式 -->
+    <div class="tab-content" id="advanced-mode">
+      <h3>高级设置</h3>
+      
+      <!-- 设置选项卡 -->
+      <div class="sub-tabs">
+        <div class="sub-tab active" data-subtab="fingerprint">指纹混淆</div>
+        <div class="sub-tab" data-subtab="behavior">行为模拟</div>
+        <div class="sub-tab" data-subtab="compliance">合规性</div>
+        <div class="sub-tab" data-subtab="batch">批处理</div>
       </div>
       
-      <div class="collapsible">鼠标行为设置</div>
-      <div class="collapsible-content">
-        <div class="settings-group">
-          <div class="settings-row">
-            <label for="mouse-speed">鼠标速度</label>
-            <input type="range" id="mouse-speed" min="400" max="1500" value="800">
-            <div class="value">800</div>
-          </div>
-          <div class="settings-row">
-            <label for="mouse-precision">精确度</label>
-            <input type="range" id="mouse-precision" min="0.5" max="1" step="0.05" value="0.8">
-            <div class="value">0.8</div>
-          </div>
-          <div class="settings-row">
-            <label for="mouse-jitter">抖动量</label>
-            <input type="range" id="mouse-jitter" min="0" max="3" step="0.1" value="0.5">
-            <div class="value">0.5</div>
-          </div>
-        </div>
-      </div>
-      
-      <div class="collapsible">键盘输入设置</div>
-      <div class="collapsible-content">
-        <div class="settings-group">
-          <div class="settings-row">
-            <label for="typing-speed">打字速度</label>
-            <input type="range" id="typing-speed" min="100" max="400" value="200">
-            <div class="value">200</div>
-          </div>
-          <div class="settings-row">
-            <label for="error-rate">错误率</label>
-            <input type="range" id="error-rate" min="0" max="0.2" step="0.01" value="0.05">
-            <div class="value">0.05</div>
-          </div>
-          <div class="settings-row">
-            <label for="correction-probability">纠错概率</label>
-            <input type="range" id="correction-probability" min="0.5" max="1" step="0.05" value="0.8">
-            <div class="value">0.8</div>
-          </div>
-        </div>
-      </div>
-      
-      <div class="collapsible">阅读行为设置</div>
-      <div class="collapsible-content">
-        <div class="settings-group">
-          <div class="settings-row">
-            <label for="reading-speed">阅读速度</label>
-            <input type="range" id="reading-speed" min="100" max="400" value="200">
-            <div class="value">200</div>
-          </div>
-          <div class="settings-row">
-            <label for="scanning-probability">扫描概率</label>
-            <input type="range" id="scanning-probability" min="0" max="0.8" step="0.05" value="0.3">
-            <div class="value">0.3</div>
-          </div>
-        </div>
-      </div>
-      
-      <div class="collapsible">注意力设置</div>
-      <div class="collapsible-content">
-        <div class="settings-group">
-          <div class="settings-row">
-            <label for="attention-span">注意力持续时间 (秒)</label>
-            <input type="range" id="attention-span" min="5" max="60" value="15">
-            <div class="value">15</div>
-          </div>
-          <div class="settings-row">
-            <label for="distraction-probability">分心概率</label>
-            <input type="range" id="distraction-probability" min="0" max="0.3" step="0.01" value="0.05">
-            <div class="value">0.05</div>
-          </div>
-        </div>
-      </div>
-      
-      <div class="collapsible">休息设置</div>
-      <div class="collapsible-content">
-        <div class="settings-group">
-          <div class="settings-row">
-            <label for="break-interval">休息间隔 (分钟)</label>
-            <input type="range" id="break-interval" min="5" max="60" value="15">
-            <div class="value">15</div>
-          </div>
-          <div class="settings-row">
-            <label for="break-duration">休息时长 (秒)</label>
-            <input type="range" id="break-duration" min="10" max="120" value="30">
-            <div class="value">30</div>
-          </div>
-        </div>
-      </div>
-      
-      <button id="save-behavior">保存行为设置</button>
-      <button id="reset-behavior" class="tertiary">重置为默认值</button>
-    </div>
-    
-    <!-- 指纹保护标签页 -->
-    <div class="tab-content" id="fingerprint-tab">
-      <div class="form-group">
-        <div class="settings-row">
-          <label for="fingerprint-protection">启用指纹保护</label>
-          <label class="switch">
-            <input type="checkbox" id="fingerprint-protection" checked>
-            <span class="slider"></span>
-          </label>
-        </div>
-      </div>
-      
-      <div class="collapsible">浏览器指纹设置</div>
-      <div class="collapsible-content">
-        <div class="settings-group">
-          <div class="settings-row">
-            <label for="user-agent">User-Agent</label>
-            <select id="user-agent">
-              <option value="chrome-win">Chrome (Windows)</option>
-              <option value="chrome-mac">Chrome (macOS)</option>
-              <option value="firefox-win">Firefox (Windows)</option>
-              <option value="firefox-mac">Firefox (macOS)</option>
-              <option value="edge-win">Edge (Windows)</option>
-              <option value="safari-mac">Safari (macOS)</option>
-            </select>
-          </div>
-          <div class="settings-row">
-            <label for="screen-resolution">屏幕分辨率</label>
-            <select id="screen-resolution">
-              <option value="1920x1080">1920 x 1080</option>
-              <option value="1366x768">1366 x 768</option>
-              <option value="1440x900">1440 x 900</option>
-              <option value="1536x864">1536 x 864</option>
-              <option value="2560x1440">2560 x 1440</option>
-            </select>
-          </div>
-        </div>
-      </div>
-      
-      <div class="collapsible">动态指纹设置</div>
-      <div class="collapsible-content">
-        <div class="settings-group">
-          <div class="settings-row">
-            <label for="dynamic-fingerprint">启用动态指纹</label>
-            <label class="switch">
-              <input type="checkbox" id="dynamic-fingerprint" checked>
-              <span class="slider"></span>
-            </label>
-          </div>
-          <div class="settings-row">
-            <label for="change-interval">变化间隔 (分钟)</label>
-            <input type="range" id="change-interval" min="10" max="60" value="30">
-            <div class="value">30</div>
-          </div>
-        </div>
-      </div>
-      
-      <div class="collapsible">TCP/IP指纹设置</div>
-      <div class="collapsible-content">
-        <div class="settings-group">
-          <div class="settings-row">
-            <label for="tcp-fingerprint">启用TCP/IP指纹混淆</label>
-            <label class="switch">
-              <input type="checkbox" id="tcp-fingerprint" checked>
-              <span class="slider"></span>
-            </label>
-          </div>
-          <div class="settings-row">
-            <label for="tcp-profile">TCP/IP配置文件</label>
-            <select id="tcp-profile">
-              <option value="chrome-win">Chrome (Windows)</option>
-              <option value="firefox-win">Firefox (Windows)</option>
-              <option value="safari-mac">Safari (macOS)</option>
-              <option value="edge-win">Edge (Windows)</option>
-              <option value="random">随机 (每次连接)</option>
-            </select>
-          </div>
-        </div>
-      </div>
-      
-      <button id="save-fingerprint">保存指纹设置</button>
-      <button id="test-fingerprint" class="tertiary">测试指纹保护</button>
-    </div>
-    
-    <!-- 设置标签页 -->
-    <div class="tab-content" id="settings-tab">
-      <div class="form-group">
-        <div class="settings-row">
-          <label for="auto-update">自动更新漏洞库</label>
-          <label class="switch">
-            <input type="checkbox" id="auto-update" checked>
-            <span class="slider"></span>
-          </label>
-        </div>
-      </div>
-      
-      <div class="form-group">
-        <div class="settings-row">
-          <label for="respect-robots">遵守robots.txt</label>
-          <label class="switch">
+      <!-- 合规性设置 -->
+      <div class="sub-tab-content" id="compliance-tab">
+        <div class="form-group">
+          <div class="checkbox-container">
             <input type="checkbox" id="respect-robots" checked>
-            <span class="slider"></span>
-          </label>
+            <label for="respect-robots">遵守robots.txt</label>
+          </div>
+          <p class="description">自动解析robots.txt文件，遵守网站访问规则</p>
+        </div>
+        
+        <div class="form-group">
+          <div class="checkbox-container">
+            <input type="checkbox" id="check-legal" checked>
+            <label for="check-legal">检查网站法律声明</label>
+          </div>
+          <p class="description">自动解析网站的法律声明和使用条款，确保测试行为合规</p>
+        </div>
+        
+        <div class="form-group">
+          <div class="checkbox-container">
+            <input type="checkbox" id="limit-requests" checked>
+            <label for="limit-requests">限制请求频率</label>
+          </div>
+          <p class="description">限制对目标网站的请求频率，避免造成过大负载</p>
+        </div>
+        
+        <div class="form-group">
+          <label for="request-interval">请求间隔 (毫秒)</label>
+          <input type="number" id="request-interval" min="100" max="5000" value="500">
+          <p class="description">两次请求之间的最小间隔时间</p>
         </div>
       </div>
       
-      <div class="form-group">
-        <div class="settings-row">
-          <label for="safe-mode">安全模式 (避免危险操作)</label>
-          <label class="switch">
-            <input type="checkbox" id="safe-mode" checked>
-            <span class="slider"></span>
-          </label>
+      <!-- 批处理设置 -->
+      <div class="sub-tab-content" id="batch-tab">
+        <div class="form-group">
+          <label for="max-parallel">最大并行任务数</label>
+          <input type="number" id="max-parallel" min="1" max="5" value="1">
+          <p class="description">同时处理的最大网站数量</p>
+        </div>
+        
+        <div class="form-group">
+          <label for="timeout">任务超时 (分钟)</label>
+          <input type="number" id="timeout" min="5" max="120" value="30">
+          <p class="description">单个网站的最大处理时间</p>
+        </div>
+        
+        <div class="form-group">
+          <div class="checkbox-container">
+            <input type="checkbox" id="auto-close-tabs" checked>
+            <label for="auto-close-tabs">自动关闭已完成的标签页</label>
+          </div>
+          <p class="description">扫描完成后自动关闭浏览器标签页</p>
         </div>
       </div>
+    </div>
+    
+    <!-- 检测结果模式 -->
+    <div class="tab-content" id="results-mode">
+      <h3>最近检测结果</h3>
       
-      <div class="form-group">
-        <label for="report-format">报告格式</label>
-        <select id="report-format">
-          <option value="html">HTML</option>
-          <option value="json">JSON</option>
-          <option value="csv">CSV</option>
-          <option value="markdown">Markdown</option>
-        </select>
+      <div id="recent-results">
+        <div class="loading">加载中...</div>
       </div>
       
-      <div class="form-group">
-        <label for="proxy-settings">代理设置 (可选)</label>
-        <input type="text" id="proxy-settings" placeholder="http://proxy.example.com:8080">
-      </div>
-      
-      <button id="save-settings">保存设置</button>
-      <button id="clear-data" class="tertiary">清除所有数据</button>
+      <button id="reset-settings" class="tertiary">恢复默认设置</button>
     </div>
   </div>
   

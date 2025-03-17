@@ -192,13 +192,30 @@ document.addEventListener('DOMContentLoaded', () => {
     chrome.tabs.create({ url: 'report.html' });
   });
   
+  // 安全地发送消息
+  function safeSendMessage(message, callback) {
+    try {
+      if (chrome && chrome.runtime && chrome.runtime.sendMessage) {
+        chrome.runtime.sendMessage(message, callback || function() {});
+      } else {
+        console.warn('chrome.runtime.sendMessage 不可用');
+        if (callback) callback({error: 'chrome.runtime.sendMessage 不可用'});
+      }
+    } catch (error) {
+      console.error('发送消息时出错:', error);
+      if (callback) callback({error: error.message});
+    }
+  }
+  
   // 导出CSV
   safeAddEventListener(exportCsvButton, 'click', () => {
-    chrome.runtime.sendMessage({ action: 'exportCSV' }, (response) => {
+    safeSendMessage({ action: 'exportCSV' }, (response) => {
       if (response && response.csv) {
         downloadCSV(response.csv);
+      } else if (response && response.error) {
+        showNotification('导出失败: ' + response.error);
       } else {
-        alert('暂无数据可导出');
+        showNotification('导出失败，请稍后重试');
       }
     });
   });

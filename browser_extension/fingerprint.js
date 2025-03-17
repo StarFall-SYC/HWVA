@@ -67,20 +67,35 @@ class FingerprintObfuscator {
     }
   }
   
+  // 安全地发送消息
+  safeSendMessage(message, callback) {
+    try {
+      if (chrome && chrome.runtime && chrome.runtime.sendMessage) {
+        chrome.runtime.sendMessage(message, callback || function() {});
+      } else {
+        console.warn('chrome.runtime.sendMessage 不可用');
+        if (callback) callback({error: 'chrome.runtime.sendMessage 不可用'});
+      }
+    } catch (error) {
+      console.error('发送消息时出错:', error);
+      if (callback) callback({error: error.message});
+    }
+  }
+  
   // 从background script加载设置
   loadSettings() {
-    chrome.runtime.sendMessage({ action: 'getFingerprint' }, (response) => {
-      if (response) {
-        // 更新设置
-        Object.assign(this.settings, response);
-        
-        // 重新应用混淆
-        this.applyObfuscation();
-        
-        // 重新设置动态指纹
-        if (this.settings.dynamicFingerprint.enabled) {
-          this.setupDynamicFingerprint();
-        }
+    // 从存储中加载设置
+    this.safeSendMessage({ action: 'getFingerprint' }, (response) => {
+      if (response && response.settings) {
+        this.settings = response.settings;
+        console.log('[指纹混淆] 已加载设置');
+      } else {
+        console.log('[指纹混淆] 使用默认设置');
+      }
+      
+      // 设置动态指纹更新计时器
+      if (this.settings.dynamicFingerprint.enabled) {
+        this.setupDynamicFingerprint();
       }
     });
   }
@@ -108,43 +123,21 @@ class FingerprintObfuscator {
   
   // 更新动态指纹
   updateDynamicFingerprint() {
-    // 更新屏幕分辨率
-    const range = this.settings.dynamicFingerprint.variationRange.screenResolution;
-    this.settings.screenResolution.width = 1920 + Math.floor(Math.random() * range.width * 2) - range.width;
-    this.settings.screenResolution.height = 1080 + Math.floor(Math.random() * range.height * 2) - range.height;
+    console.log('[指纹混淆] 更新动态指纹');
     
-    // 更新Canvas噪声
-    const noiseRange = this.settings.dynamicFingerprint.variationRange.canvasNoise;
-    this.settings.canvasNoise.noiseLevel = 0.1 + Math.random() * noiseRange.noiseLevel;
-    this.settings.canvasNoise.noiseColor = 100 + Math.floor(Math.random() * 50);
+    // 生成新的随机值
+    this.settings.currentUserAgent = this.getRandomUserAgent();
+    this.settings.screenResolution = this.getRandomScreenResolution();
+    this.settings.hardwareConcurrency = this.getRandomHardwareConcurrency();
+    this.settings.deviceMemory = this.getRandomDeviceMemory();
     
-    // 更新硬件信息
-    const hwRange = this.settings.dynamicFingerprint.variationRange.hardwareConcurrency;
-    this.settings.hardwareConcurrency = 4 + Math.floor(Math.random() * hwRange) - Math.floor(hwRange / 2);
-    
-    const memRange = this.settings.dynamicFingerprint.variationRange.deviceMemory;
-    this.settings.deviceMemory = 8 + Math.floor(Math.random() * memRange) - Math.floor(memRange / 2);
-    
-    // 更新电池状态
-    this.settings.batteryStatus.charging = Math.random() > 0.5;
-    this.settings.batteryStatus.level = 0.1 + Math.random() * 0.9;
-    this.settings.batteryStatus.chargingTime = Math.floor(1000 + Math.random() * 3000);
-    this.settings.batteryStatus.dischargingTime = Math.floor(1000 + Math.random() * 5000);
-    
-    // 更新最后变更时间
+    // 更新上次变更时间
     this.settings.dynamicFingerprint.lastChangeTime = Date.now();
     
-    // 保存设置到background
-    chrome.runtime.sendMessage({ 
-      action: 'updateFingerprint', 
-      settings: this.settings 
-    }, response => {
-      // 处理可能的错误
-      if (chrome.runtime.lastError) {
-        console.error(`更新指纹设置失败: ${chrome.runtime.lastError.message}`);
-      } else if (response && response.success) {
-        console.log('指纹设置已更新');
-      }
+    // 发送更新到后台脚本
+    this.safeSendMessage({
+      action: 'updateFingerprint',
+      settings: this.settings
     });
     
     // 重新应用混淆
@@ -800,21 +793,13 @@ class FingerprintObfuscator {
   
   // 混淆TCP/IP指纹
   obfuscateTCPFingerprint() {
-    if (!this.settings.tlsFingerprint.enabled) return;
-    
-    // 注意：这部分需要在background.js中实现完整功能
-    // 这里只是通知background.js启用TCP/IP指纹混淆
-    chrome.runtime.sendMessage({ 
-      action: 'enableTCPFingerprinting',
-      settings: this.settings.tlsFingerprint
-    }, response => {
-      // 处理可能的错误
-      if (chrome.runtime.lastError) {
-        console.error(`启用TCP/IP指纹混淆失败: ${chrome.runtime.lastError.message}`);
-      } else if (response && response.success) {
-        console.log('TCP/IP指纹混淆已启用');
-      }
+    // 发送消息到后台脚本，请求更新TCP/IP指纹
+    this.safeSendMessage({
+      action: 'updateTCPFingerprint',
+      profile: this.settings.tlsFingerprint.currentProfile
     });
+    
+    return true;
   }
   
   // 注入脚本到页面

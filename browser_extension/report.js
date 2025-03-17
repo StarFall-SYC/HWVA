@@ -33,6 +33,21 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  // 安全地发送消息
+  function safeSendMessage(message, callback) {
+    try {
+      if (chrome && chrome.runtime && chrome.runtime.sendMessage) {
+        chrome.runtime.sendMessage(message, callback || function() {});
+      } else {
+        console.warn('chrome.runtime.sendMessage 不可用');
+        if (callback) callback({error: 'chrome.runtime.sendMessage 不可用'});
+      }
+    } catch (error) {
+      console.error('发送消息时出错:', error);
+      if (callback) callback({error: error.message});
+    }
+  }
+
   // DOM元素
   const vulnerabilitiesContainer = safeGetElement('vulnerabilities-container');
   const filterType = safeGetElement('filter-type');
@@ -264,7 +279,7 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // 导出报告
   function exportReport() {
-    chrome.runtime.sendMessage({
+    safeSendMessage({
       action: 'generateReport'
     });
   }
@@ -272,7 +287,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // 清空数据
   function clearData() {
     if (confirm('确定要清空所有漏洞数据吗？此操作不可撤销。')) {
-      chrome.runtime.sendMessage(
+      safeSendMessage(
         {
           action: 'clearVulnerabilities'
         },

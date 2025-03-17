@@ -312,15 +312,41 @@ class DOMAnalyzer {
     }
   }
 
+  // 安全地发送消息
+  safeSendMessage(message, callback) {
+    try {
+      if (chrome && chrome.runtime && chrome.runtime.sendMessage) {
+        chrome.runtime.sendMessage(message, callback || function() {});
+      } else {
+        console.warn('chrome.runtime.sendMessage 不可用');
+        if (callback) callback({error: 'chrome.runtime.sendMessage 不可用'});
+      }
+    } catch (error) {
+      console.error('发送消息时出错:', error);
+      if (callback) callback({error: error.message});
+    }
+  }
+
   // 更新humanClick方法，使用新的人类行为模拟器
   async humanClick(element) {
-    if (!element) return;
+    if (!element) return false;
     
     try {
       // 获取元素位置
-    const rect = element.getBoundingClientRect();
+      const rect = element.getBoundingClientRect();
       const centerX = rect.left + rect.width / 2;
       const centerY = rect.top + rect.height / 2;
+      
+      // 通知后台脚本
+      this.safeSendMessage({
+        action: 'humanClick',
+        details: {
+          x: centerX,
+          y: centerY,
+          element: element.tagName,
+          url: window.location.href
+        }
+      });
       
       // 检查元素是否在视口内
       if (centerX < 0 || centerY < 0 || 
@@ -351,7 +377,7 @@ class DOMAnalyzer {
       this.lastInteractionTime = Date.now();
       
       // 发送点击事件到background
-      chrome.runtime.sendMessage({
+      this.safeSendMessage({
         action: 'recordInteraction',
         data: {
           type: 'click',
@@ -373,9 +399,20 @@ class DOMAnalyzer {
   
   // 更新humanTypeText方法，使用新的人类行为模拟器
   async humanTypeText(inputElement, text) {
-    if (!inputElement || !text) return;
+    if (!inputElement || !text) return false;
     
     try {
+      // 通知后台脚本
+      this.safeSendMessage({
+        action: 'humanType',
+        details: {
+          element: inputElement.tagName,
+          type: inputElement.type || 'text',
+          length: text.length,
+          url: window.location.href
+        }
+      });
+      
       // 先点击输入框
       await this.humanClick(inputElement);
       
@@ -393,7 +430,7 @@ class DOMAnalyzer {
     this.lastInteractionTime = Date.now();
     
       // 发送输入事件到background
-      chrome.runtime.sendMessage({
+      this.safeSendMessage({
         action: 'recordInteraction',
         data: {
           type: 'input',
@@ -494,7 +531,7 @@ class DOMAnalyzer {
       this.lastInteractionTime = Date.now();
       
       // 发送滚动事件到background
-      chrome.runtime.sendMessage({
+      this.safeSendMessage({
         action: 'recordInteraction',
         data: {
           type: 'scroll',
@@ -2293,19 +2330,26 @@ class VulnerabilityDetector {
   
   // 记录漏洞
   recordVulnerability(type, details) {
-    const vulnerability = {
+    // 记录漏洞信息
+    const vulnerabilityData = {
       type,
-      details,
-      timestamp: new Date().toISOString()
+      details: {
+        ...details,
+        location: window.location.href,
+        timestamp: new Date().toISOString()
+      },
+      timestamp: Date.now()
     };
     
-    this.foundVulnerabilities.push(vulnerability);
-    
-    // 发送消息到background script
-    chrome.runtime.sendMessage({
-      action: 'vulnerabilityDetected',
-      vulnerability
+    // 发送到后台脚本
+    this.safeSendMessage({
+      action: 'addVulnerability',
+      data: vulnerabilityData
     });
+    
+    console.log(`[漏洞检测] 发现${type}漏洞:`, details);
+    
+    return vulnerabilityData;
   }
 }
 

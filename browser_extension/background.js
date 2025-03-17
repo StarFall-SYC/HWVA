@@ -341,59 +341,66 @@ class HumanoidSimulator {
   }
 }
 
-// 加载指纹混淆外部脚本
+// 加载指纹混淆脚本
 function loadFingerprintObfuscatorScript(tabId) {
   return new Promise((resolve, reject) => {
-    try {
-      // 首先验证标签页是否存在
-      chrome.tabs.get(tabId, (tab) => {
-        if (chrome.runtime.lastError) {
-          console.error(`标签页 ${tabId} 不存在:`, chrome.runtime.lastError.message);
-          reject(new Error(`标签页不存在: ${chrome.runtime.lastError.message}`));
-          return;
-        }
-        
-        // 确保标签页URL是http或https开头
-        if (!tab.url || (!tab.url.startsWith('http://') && !tab.url.startsWith('https://'))) {
-          console.error(`标签页 ${tabId} URL不是http/https:`, tab.url);
-          reject(new Error(`标签页URL不支持: ${tab.url}`));
-          return;
-        }
-        
-        // 如果标签页存在且URL有效，尝试执行脚本
-        chrome.scripting.executeScript({
-          target: { tabId: tabId },
-          files: ['injected_scripts/fingerprint_obfuscator.js']
-        }).then(() => {
-          console.log(`指纹混淆脚本已在标签页 ${tabId} 上加载`);
-          resolve(true);
-        }).catch(error => {
-          console.error(`在标签页 ${tabId} 加载指纹混淆脚本失败:`, error);
-          reject(error);
-        });
+    // 首先检查标签页是否仍然存在
+    chrome.tabs.get(tabId, (tab) => {
+      if (chrome.runtime.lastError) {
+        console.error(`标签页 ${tabId} 不存在:`, chrome.runtime.lastError.message);
+        reject(new Error(`标签页不存在: ${chrome.runtime.lastError.message}`));
+        return;
+      }
+      
+      // 确保URL是有效的HTTP/HTTPS URL
+      if (!tab.url || (!tab.url.startsWith('http://') && !tab.url.startsWith('https://'))) {
+        console.error(`标签页 ${tabId} URL不是http/https:`, tab.url);
+        reject(new Error(`标签页URL不支持: ${tab.url}`));
+        return;
+      }
+      
+      // 如果标签页有效，执行脚本注入
+      chrome.scripting.executeScript({
+        target: { tabId: tabId },
+        files: ['injected_scripts/fingerprint_obfuscator.js']
+      })
+      .then(() => {
+        console.log(`成功在标签页 ${tabId} 上加载指纹混淆脚本`);
+        resolve();
+      })
+      .catch(error => {
+        console.error(`在标签页 ${tabId} 上执行脚本时出错:`, error);
+        reject(error);
       });
-    } catch (error) {
-      console.error('尝试加载指纹混淆脚本时出错:', error);
-      reject(error);
-    }
+    });
   });
 }
 
 // 初始化指纹混淆
 function initFingerprintObfuscation() {
-  // 监听标签页更新，加载指纹混淆脚本
+  // 监听标签页更新事件
   chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-    // 只在页面完全加载后且URL是http/https时执行
-    if (changeInfo.status === 'complete' && tab.url && 
-        (tab.url.startsWith('http://') || tab.url.startsWith('https://'))) {
+    // 只有当页面完全加载完成时才处理
+    if (changeInfo.status === 'complete' && tab.url && (tab.url.startsWith('http://') || tab.url.startsWith('https://'))) {
+      console.log(`标签页 ${tabId} 已加载完成: ${tab.url}`);
       
-      // 使用延迟加载，确保DOM已完全准备好
-      setTimeout(() => {
-        loadFingerprintObfuscatorScript(tabId).catch(error => {
-          console.error(`在标签页 ${tabId} 加载指纹混淆脚本失败:`, error);
-          // 出错时不重试，避免无限循环
-        });
-      }, 500); // 延迟500毫秒
+      try {
+        // 添加一些延迟，确保DOM已经准备好
+        setTimeout(() => {
+          // 尝试加载指纹混淆脚本
+          loadFingerprintObfuscatorScript(tabId)
+            .then(() => {
+              console.log(`已在标签页 ${tabId} 上加载指纹混淆脚本`);
+            })
+            .catch(error => {
+              // 处理可能的错误，如标签页已关闭或导航到其他页面
+              console.error(`无法在标签页 ${tabId} 上加载指纹混淆脚本:`, error);
+              // 不要尝试重试，以避免无限循环
+            });
+        }, 500); // 延迟500毫秒加载脚本
+      } catch (error) {
+        console.error(`处理标签页 ${tabId} 更新时出错:`, error);
+      }
     }
   });
   
@@ -929,7 +936,7 @@ function init() {
               return;
             }
             
-            // 直接注入代码，不使用Function构造函数
+            // 直接注入代码，使用更安全的方法
             chrome.scripting.executeScript({
               target: { tabId: sender.tab.id },
               func: (code) => {
@@ -938,6 +945,7 @@ function init() {
                   const script = document.createElement('script');
                   script.textContent = code;
                   document.head.appendChild(script);
+                  // 脚本执行后删除，避免污染页面
                   setTimeout(() => {
                     if (script.parentNode) {
                       script.parentNode.removeChild(script);

@@ -82,6 +82,34 @@ class FingerprintObfuscator {
     }
   }
   
+  // 获取随机用户代理
+  getRandomUserAgent() {
+    const userAgents = [
+      // Windows + Chrome
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.110 Safari/537.36",
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/97.0.4692.71 Safari/537.36",
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/98.0.4758.102 Safari/537.36",
+      
+      // Windows + Edge
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.110 Safari/537.36 Edg/96.0.1054.62",
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/97.0.4692.71 Safari/537.36 Edg/97.0.1072.62",
+      
+      // Windows + Firefox
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:95.0) Gecko/20100101 Firefox/95.0",
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:96.0) Gecko/20100101 Firefox/96.0",
+      
+      // macOS + Chrome
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 12_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.110 Safari/537.36",
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 12_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/97.0.4692.71 Safari/537.36",
+      
+      // macOS + Safari
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 12_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.2 Safari/605.1.15",
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 12_2) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.3 Safari/605.1.15"
+    ];
+    
+    return userAgents[Math.floor(Math.random() * userAgents.length)];
+  }
+  
   // 从background script加载设置
   loadSettings() {
     // 从存储中加载设置
@@ -123,25 +151,30 @@ class FingerprintObfuscator {
   
   // 更新动态指纹
   updateDynamicFingerprint() {
-    console.log('[指纹混淆] 更新动态指纹');
-    
-    // 生成新的随机值
-    this.settings.currentUserAgent = this.getRandomUserAgent();
-    this.settings.screenResolution = this.getRandomScreenResolution();
-    this.settings.hardwareConcurrency = this.getRandomHardwareConcurrency();
-    this.settings.deviceMemory = this.getRandomDeviceMemory();
-    
-    // 更新上次变更时间
-    this.settings.dynamicFingerprint.lastChangeTime = Date.now();
-    
-    // 发送更新到后台脚本
-    this.safeSendMessage({
-      action: 'updateFingerprint',
-      settings: this.settings
-    });
-    
-    // 重新应用混淆
-    this.applyObfuscation();
+    try {
+      console.log('[指纹混淆] 更新动态指纹');
+      
+      // 生成新的随机值
+      this.settings.currentUserAgent = this.getRandomUserAgent();
+      this.settings.screenResolution = this.getRandomScreenResolution();
+      this.settings.hardwareConcurrency = this.getRandomHardwareConcurrency();
+      this.settings.deviceMemory = this.getRandomDeviceMemory();
+      
+      // 更新上次变更时间
+      this.settings.dynamicFingerprint.lastChangeTime = Date.now();
+      
+      // 发送更新到后台脚本
+      this.safeSendMessage({
+        action: 'updateFingerprint',
+        settings: this.settings
+      });
+      
+      // 重新应用混淆
+      this.applyObfuscation();
+    } catch (error) {
+      console.error('[指纹混淆] 更新动态指纹时出错:', error);
+      // 出现错误时不要抛出，记录错误并允许继续运行
+    }
   }
   
   // 应用所有混淆技术
@@ -165,22 +198,34 @@ class FingerprintObfuscator {
   
   // 混淆用户代理
   obfuscateUserAgent() {
-    const userAgent = this.settings.currentUserAgent;
-    
-    // 使用chrome.scripting API执行外部脚本
-    this.safeSendMessage({
-      action: 'executeScript',
-      scriptContent: `
-        if (window.fingerprintObfuscator) {
-          window.fingerprintObfuscator.obfuscateUserAgent("${userAgent}");
-        } else {
-          // 如果外部脚本未加载，使用内联方法
-          Object.defineProperty(navigator, 'userAgent', {
-            get: function() { return "${userAgent}"; }
-          });
+    try {
+      const userAgent = this.settings.currentUserAgent;
+      
+      // 使用chrome.scripting API执行外部脚本
+      this.safeSendMessage({
+        action: 'executeScript',
+        scriptContent: `
+          try {
+            if (window.fingerprintObfuscator) {
+              window.fingerprintObfuscator.obfuscateUserAgent("${userAgent.replace(/"/g, '\\"')}");
+            } else {
+              // 如果外部脚本未加载，使用内联方法
+              Object.defineProperty(navigator, 'userAgent', {
+                get: function() { return "${userAgent.replace(/"/g, '\\"')}"; }
+              });
+            }
+          } catch(e) {
+            console.error('无法混淆用户代理:', e);
+          }
+        `
+      }, response => {
+        if (response && response.error) {
+          console.error('[指纹混淆] 混淆用户代理时出错:', response.error);
         }
-      `
-    });
+      });
+    } catch (error) {
+      console.error('[指纹混淆] 混淆用户代理时出错:', error);
+    }
   }
   
   // 混淆屏幕分辨率

@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>漏洞检测结果</title>
+  <style>
+    body {
+      font-family: 'Microsoft YaHei', Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background-color: #f8f9fa;
+      color: #333;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      background-color: white;
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    h1 {
+      color: #2c3e50;
+      border-bottom: 2px solid #eee;
+      padding-bottom: 15px;
+      margin-top: 0;
+      display: flex;
+      align-items: center;
+    }
+    h1 img {
+      width: 32px;
+      height: 32px;
+      margin-right: 10px;
+    }
+    .controls {
+      margin: 20px 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .filters {
+      display: flex;
+      gap: 15px;
+      flex-wrap: wrap;
+    }
+    select, button {
+      padding: 8px 12px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      background-color: white;
+    }
+    button {
+      background-color: #4285f4;
+      color: white;
+      border: none;
+      cursor: pointer;
+      font-weight: bold;
+      transition: background-color 0.2s;
+    }
+    button:hover {
+      background-color: #3367d6;
+    }
+    button.danger {
+      background-color: #e74c3c;
+    }
+    button.danger:hover {
+      background-color: #c0392b;
+    }
+    button.secondary {
+      background-color: #34a853;
+    }
+    button.secondary:hover {
+      background-color: #2d9249;
+    }
+    .vulnerabilities {
+      margin-top: 20px;
+    }
+    .vulnerability {
+      margin-bottom: 20px;
+      border-left: 4px solid #e74c3c;
+      padding: 15px;
+      background-color: #f8f9fa;
+      border-radius: 0 4px 4px 0;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .vulnerability:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    .vulnerability h3 {
+      margin-top: 0;
+      color: #c0392b;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .vulnerability-details {
+      display: grid;
+      grid-template-columns: 120px 1fr;
+      row-gap: 8px;
+      margin-top: 10px;
+    }
+    .label {
+      font-weight: bold;
+      color: #555;
+    }
+    .evidence {
+      background-color: #ecf0f1;
+      padding: 10px;
+      border-radius: 4px;
+      font-family: monospace;
+      margin-top: 10px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    .timestamp {
+      color: #7f8c8d;
+      font-size: 0.8em;
+      margin-top: 10px;
+      text-align: right;
+    }
+    .no-results {
+      text-align: center;
+      padding: 40px;
+      color: #7f8c8d;
+      font-style: italic;
+    }
+    .pagination {
+      display: flex;
+      justify-content: center;
+      margin-top: 20px;
+    }
+    .pagination button {
+      margin: 0 5px;
+    }
+    .current-page {
+      display: inline-block;
+      padding: 8px 12px;
+    }
+    .summary {
+      background-color: #e8f4f8;
+      padding: 15px;
+      border-radius: 4px;
+      margin-bottom: 20px;
+    }
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 15px;
+      margin-top: 10px;
+    }
+    .summary-item {
+      background-color: white;
+      padding: 10px;
+      border-radius: 4px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      transition: transform 0.2s;
+    }
+    .summary-item:hover {
+      transform: translateY(-2px);
+    }
+    .summary-item .number {
+      font-size: 24px;
+      font-weight: bold;
+      color: #2980b9;
+    }
+    .summary-item .label {
+      margin-top: 5px;
+      color: #7f8c8d;
+    }
+    .severity-badge {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: bold;
+      color: white;
+    }
+    .severity-critical {
+      background-color: #9c27b0;
+    }
+    .severity-high {
+      background-color: #e74c3c;
+    }
+    .severity-medium {
+      background-color: #f39c12;
+    }
+    .severity-low {
+      background-color: #3498db;
+    }
+    .severity-info {
+      background-color: #7f8c8d;
+    }
+    .chart-container {
+      display: flex;
+      gap: 20px;
+      margin-top: 20px;
+      flex-wrap: wrap;
+    }
+    .chart {
+      flex: 1;
+      min-width: 300px;
+      height: 300px;
+      background-color: white;
+      border-radius: 4px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      padding: 15px;
+    }
+    .chart h3 {
+      margin-top: 0;
+      color: #2c3e50;
+      font-size: 16px;
+      border-bottom: 1px solid #eee;
+      padding-bottom: 10px;
+    }
+    .chart-content {
+      height: 250px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .search-box {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    .search-box input {
+      flex: 1;
+      padding: 8px 12px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    .tabs {
+      display: flex;
+      border-bottom: 1px solid #ddd;
+      margin-bottom: 20px;
+    }
+    .tab {
+      padding: 10px 20px;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s;
+    }
+    .tab.active {
+      border-bottom-color: #4285f4;
+      color: #4285f4;
+      font-weight: bold;
+    }
+    .tab-content {
+      display: none;
+    }
+    .tab-content.active {
+      display: block;
+    }
+    .domain-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    .domain-item {
+      background-color: #f5f5f5;
+      padding: 8px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+    .domain-item:hover {
+      background-color: #e0e0e0;
+    }
+    .domain-item.active {
+      background-color: #4285f4;
+      color: white;
+    }
+    .export-options {
+      position: relative;
+      display: inline-block;
+    }
+    .export-dropdown {
+      display: none;
+      position: absolute;
+      background-color: white;
+      min-width: 160px;
+      box-shadow: 0 8px 16px rgba(0,0,0,0.2);
+      z-index: 1;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .export-options:hover .export-dropdown {
+      display: block;
+    }
+    .export-dropdown a {
+      color: black;
+      padding: 12px 16px;
+      text-decoration: none;
+      display: block;
+      transition: background-color 0.2s;
+    }
+    .export-dropdown a:hover {
+      background-color: #f1f1f1;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1><img src="icon48.png" alt="Logo">漏洞检测结果</h1>
+    
+    <div class="tabs">
+      <div class="tab active" data-tab="dashboard">仪表盘</div>
+      <div class="tab" data-tab="vulnerabilities">漏洞列表</div>
+      <div class="tab" data-tab="domains">站点分析</div>
+    </div>
+    
+    <div id="dashboard-tab" class="tab-content active">
+      <div class="summary">
+        <h2>总体统计</h2>
+        <div class="summary-grid">
+          <div class="summary-item">
+            <div class="number" id="total-sites">0</div>
+            <div class="label">检测站点数</div>
+          </div>
+          <div class="summary-item">
+            <div class="number" id="total-vulnerabilities">0</div>
+            <div class="label">发现漏洞总数</div>
+          </div>
+          <div class="summary-item">
+            <div class="number" id="critical-count">0</div>
+            <div class="label">严重漏洞</div>
+          </div>
+          <div class="summary-item">
+            <div class="number" id="high-count">0</div>
+            <div class="label">高危漏洞</div>
+          </div>
+          <div class="summary-item">
+            <div class="number" id="medium-count">0</div>
+            <div class="label">中危漏洞</div>
+          </div>
+          <div class="summary-item">
+            <div class="number" id="low-count">0</div>
+            <div class="label">低危漏洞</div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="chart-container">
+        <div class="chart">
+          <h3>漏洞类型分布</h3>
+          <div class="chart-content" id="vulnerability-type-chart">
+            <!-- 图表将通过JavaScript动态生成 -->
+            <div>图表加载中...</div>
+          </div>
+        </div>
+        <div class="chart">
+          <h3>漏洞严重程度分布</h3>
+          <div class="chart-content" id="severity-chart">
+            <!-- 图表将通过JavaScript动态生成 -->
+            <div>图表加载中...</div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="chart-container">
+        <div class="chart">
+          <h3>最近检测活动</h3>
+          <div class="chart-content" id="recent-activity-chart">
+            <!-- 图表将通过JavaScript动态生成 -->
+            <div>图表加载中...</div>
+          </div>
+        </div>
+        <div class="chart">
+          <h3>站点漏洞分布</h3>
+          <div class="chart-content" id="domain-distribution-chart">
+            <!-- 图表将通过JavaScript动态生成 -->
+            <div>图表加载中...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div id="vulnerabilities-tab" class="tab-content">
+      <div class="search-box">
+        <input type="text" id="search-input" placeholder="搜索漏洞...">
+        <button id="search-button">搜索</button>
+      </div>
+      
+      <div class="controls">
+        <div class="filters">
+          <select id="filter-type">
+            <option value="all">所有漏洞类型</option>
+            <option value="XSS">XSS</option>
+            <option value="SQL Injection">SQL注入</option>
+            <option value="CSRF">CSRF</option>
+            <option value="SSRF">SSRF</option>
+            <option value="XXE">XXE</option>
+            <option value="CORS Misconfiguration">CORS配置错误</option>
+            <option value="JWT Weakness">JWT弱点</option>
+            <option value="Open Redirect">开放重定向</option>
+            <option value="HTTP Parameter Pollution">HTTP参数污染</option>
+            <option value="Server-Side Template Injection">服务器端模板注入</option>
+            <option value="Sensitive Information Leakage">敏感信息泄露</option>
+            <option value="Insecure Headers">不安全的HTTP头部</option>
+            <option value="Directory Traversal">目录遍历</option>
+          </select>
+          
+          <select id="filter-severity">
+            <option value="all">所有严重程度</option>
+            <option value="Critical">严重</option>
+            <option value="High">高危</option>
+            <option value="Medium">中危</option>
+            <option value="Low">低危</option>
+            <option value="Info">信息</option>
+          </select>
+          
+          <select id="filter-domain">
+            <option value="all">所有站点</option>
+          </select>
+        </div>
+        
+        <div class="actions">
+          <div class="export-options">
+            <button id="export-button">导出报告</button>
+            <div class="export-dropdown">
+              <a href="#" id="export-html">HTML报告</a>
+              <a href="#" id="export-csv">CSV格式</a>
+              <a href="#" id="export-json">JSON格式</a>
+            </div>
+          </div>
+          <button id="clear-data" class="danger">清空数据</button>
+        </div>
+      </div>
+      
+      <div class="vulnerabilities" id="vulnerabilities-container">
+        <!-- 漏洞列表将通过JavaScript动态生成 -->
+        <div class="no-results">暂无漏洞数据</div>
+      </div>
+      
+      <div class="pagination">
+        <button id="prev-page">&laquo; 上一页</button>
+        <span class="current-page" id="current-page">第 1 页</span>
+        <button id="next-page">下一页 &raquo;</button>
+      </div>
+    </div>
+    
+    <div id="domains-tab" class="tab-content">
+      <h2>站点分析</h2>
+      
+      <div class="domain-list" id="domain-list">
+        <!-- 域名列表将通过JavaScript动态生成 -->
+        <div>加载中...</div>
+      </div>
+      
+      <div id="domain-details">
+        <h3 id="selected-domain">请选择一个站点</h3>
+        
+        <div class="summary-grid">
+          <div class="summary-item">
+            <div class="number" id="domain-vuln-count">0</div>
+            <div class="label">漏洞总数</div>
+          </div>
+          <div class="summary-item">
+            <div class="number" id="domain-critical-count">0</div>
+            <div class="label">严重漏洞</div>
+          </div>
+          <div class="summary-item">
+            <div class="number" id="domain-high-count">0</div>
+            <div class="label">高危漏洞</div>
+          </div>
+          <div class="summary-item">
+            <div class="number" id="domain-medium-count">0</div>
+            <div class="label">中危漏洞</div>
+          </div>
+        </div>
+        
+        <div class="chart-container">
+          <div class="chart">
+            <h3>漏洞类型分布</h3>
+            <div class="chart-content" id="domain-type-chart">
+              <!-- 图表将通过JavaScript动态生成 -->
+              <div>请选择一个站点</div>
+            </div>
+          </div>
+        </div>
+        
+        <h3>站点漏洞列表</h3>
+        <div id="domain-vulnerabilities">
+          <!-- 站点漏洞列表将通过JavaScript动态生成 -->
+          <div class="no-results">请选择一个站点</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <script src="report.js"></script>
+</body>
+</html> 

@@ -1,0 +1,69 @@
+# 操作系统文件
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 编辑器和IDE文件
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+.project
+.settings/
+*.swp
+*.swo
+
+# 依赖目录
+node_modules/
+bower_components/
+jspm_packages/
+vendor/
+
+# 构建输出
+dist/
+build/
+out/
+*.zip
+*.crx
+*.pem
+*.xpi
+
+# 日志文件
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 运行时数据
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# 测试覆盖率报告
+coverage/
+.nyc_output/
+
+# 临时文件
+tmp/
+temp/
+.tmp/
+.temp/
+
+# 个人配置文件
+config.local.js
+credentials.json
+
+# 浏览器扩展特定文件
+# 忽略打包后的扩展文件
+*.zip
+*.crx
+*.pem
+*.xpi
+
+# 忽略开发过程中生成的临时文件
+browser_extension/debug/
+browser_extension/temp/
+browser_extension/_metadata

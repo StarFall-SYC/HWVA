@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Humanoid Web Vulnerability Assistant</title>
+  <style>
+    body {
+      font-family: 'Microsoft YaHei', Arial, sans-serif;
+      width: 450px;
+      padding: 15px;
+      background-color: #f8f9fa;
+      color: #333;
+    }
+    .container {
+      background-color: white;
+      border-radius: 8px;
+      padding: 15px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    h2 {
+      color: #444;
+      margin-top: 0;
+      border-bottom: 1px solid #eee;
+      padding-bottom: 10px;
+      display: flex;
+      align-items: center;
+    }
+    h2 img {
+      width: 24px;
+      height: 24px;
+      margin-right: 8px;
+    }
+    .form-group {
+      margin-bottom: 15px;
+    }
+    label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: bold;
+      color: #555;
+    }
+    textarea {
+      width: 100%;
+      height: 100px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 8px;
+      resize: vertical;
+    }
+    input, select {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      box-sizing: border-box;
+    }
+    button {
+      background-color: #4285f4;
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: bold;
+      width: 100%;
+      margin-top: 10px;
+      transition: background-color 0.2s;
+    }
+    button:hover {
+      background-color: #3367d6;
+    }
+    button.secondary {
+      background-color: #34a853;
+    }
+    button.secondary:hover {
+      background-color: #2d9249;
+    }
+    button.tertiary {
+      background-color: #fbbc05;
+      color: #333;
+    }
+    button.tertiary:hover {
+      background-color: #f9ab00;
+    }
+    .status {
+      margin-top: 15px;
+      padding: 10px;
+      border-radius: 4px;
+      background-color: #f5f5f5;
+      display: none;
+    }
+    .status.active {
+      display: block;
+    }
+    .progress {
+      height: 10px;
+      background-color: #eee;
+      border-radius: 10px;
+      margin-top: 5px;
+      overflow: hidden;
+    }
+    .progress-bar {
+      height: 100%;
+      background-color: #4285f4;
+      width: 0%;
+      transition: width 0.3s;
+    }
+    .tabs {
+      display: flex;
+      margin-bottom: 15px;
+      border-radius: 4px;
+      overflow: hidden;
+      border: 1px solid #ddd;
+    }
+    .tab {
+      flex: 1;
+      text-align: center;
+      padding: 10px;
+      background-color: #f5f5f5;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-size: 13px;
+    }
+    .tab.active {
+      background-color: #4285f4;
+      color: white;
+    }
+    .tab:hover:not(.active) {
+      background-color: #e5e5e5;
+    }
+    .checkbox-group {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .checkbox-item {
+      display: flex;
+      align-items: center;
+    }
+    .checkbox-item input[type="checkbox"] {
+      width: auto;
+      margin-right: 5px;
+    }
+    .checkbox-item label {
+      font-weight: normal;
+      margin-bottom: 0;
+    }
+    .slider-container {
+      margin-top: 10px;
+    }
+    .slider-container label {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .slider-container label span {
+      font-weight: normal;
+      color: #777;
+    }
+    .slider {
+      width: 100%;
+      margin-top: 5px;
+    }
+    .collapsible {
+      background-color: #f5f5f5;
+      padding: 10px;
+      border-radius: 4px;
+      margin-bottom: 10px;
+      cursor: pointer;
+      position: relative;
+    }
+    .collapsible:after {
+      content: '+';
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-weight: bold;
+    }
+    .collapsible.active:after {
+      content: '-';
+    }
+    .collapsible-content {
+      display: none;
+      padding: 10px;
+      border: 1px solid #f5f5f5;
+      border-top: none;
+      border-radius: 0 0 4px 4px;
+    }
+    .badge {
+      display: inline-block;
+      padding: 3px 6px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: bold;
+      background-color: #4285f4;
+      color: white;
+      margin-left: 5px;
+    }
+    .tooltip {
+      position: relative;
+      display: inline-block;
+      margin-left: 5px;
+      cursor: help;
+    }
+    .tooltip .icon {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      background-color: #777;
+      color: white;
+      border-radius: 50%;
+      text-align: center;
+      line-height: 16px;
+      font-size: 12px;
+    }
+    .tooltip .tooltip-text {
+      visibility: hidden;
+      width: 200px;
+      background-color: #555;
+      color: #fff;
+      text-align: center;
+      border-radius: 6px;
+      padding: 5px;
+      position: absolute;
+      z-index: 1;
+      bottom: 125%;
+      left: 50%;
+      margin-left: -100px;
+      opacity: 0;
+      transition: opacity 0.3s;
+      font-weight: normal;
+      font-size: 12px;
+    }
+    .tooltip:hover .tooltip-text {
+      visibility: visible;
+      opacity: 1;
+    }
+    .action-buttons {
+      display: flex;
+      gap: 10px;
+    }
+    .action-buttons button {
+      flex: 1;
+    }
+    .tab-content {
+      display: none;
+    }
+    .tab-content.active {
+      display: block;
+    }
+    .badge {
+      display: inline-block;
+      padding: 3px 6px;
+      border-radius: 10px;
+      font-size: 12px;
+      font-weight: bold;
+      margin-left: 5px;
+      background-color: #4285f4;
+      color: white;
+    }
+    .badge.warning {
+      background-color: #fbbc05;
+      color: #333;
+    }
+    .badge.danger {
+      background-color: #ea4335;
+    }
+    .badge.success {
+      background-color: #34a853;
+    }
+    .settings-group {
+      border: 1px solid #eee;
+      border-radius: 4px;
+      padding: 10px;
+      margin-bottom: 15px;
+    }
+    .settings-group h3 {
+      margin-top: 0;
+      font-size: 14px;
+      color: #555;
+    }
+    .settings-row {
+      display: flex;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .settings-row label {
+      flex: 1;
+      margin-bottom: 0;
+    }
+    .settings-row input[type="range"] {
+      flex: 1;
+    }
+    .settings-row .value {
+      width: 40px;
+      text-align: right;
+      margin-left: 8px;
+      font-size: 12px;
+      color: #666;
+    }
+    .personality-types {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 15px;
+    }
+    .personality-type {
+      flex: 1;
+      text-align: center;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      cursor: pointer;
+      margin: 0 5px;
+      transition: all 0.2s;
+    }
+    .personality-type:hover {
+      background-color: #f5f5f5;
+    }
+    .personality-type.active {
+      border-color: #4285f4;
+      background-color: #e8f0fe;
+    }
+    .personality-type .icon {
+      font-size: 24px;
+      margin-bottom: 5px;
+    }
+    .personality-type .name {
+      font-weight: bold;
+      font-size: 12px;
+    }
+    .collapsible {
+      cursor: pointer;
+      padding: 10px;
+      background-color: #f5f5f5;
+      border-radius: 4px;
+      margin-bottom: 10px;
+      position: relative;
+    }
+    .collapsible:after {
+      content: '\25BC';
+      position: absolute;
+      right: 10px;
+      transition: transform 0.2s;
+    }
+    .collapsible.active:after {
+      transform: rotate(180deg);
+    }
+    .collapsible-content {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.2s ease-out;
+    }
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 40px;
+      height: 20px;
+    }
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #ccc;
+      transition: .4s;
+      border-radius: 20px;
+    }
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 16px;
+      width: 16px;
+      left: 2px;
+      bottom: 2px;
+      background-color: white;
+      transition: .4s;
+      border-radius: 50%;
+    }
+    input:checked + .slider {
+      background-color: #4285f4;
+    }
+    input:checked + .slider:before {
+      transform: translateX(20px);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2><img src="icon48.png" alt="Logo"> Humanoid Web Vulnerability Assistant</h2>
+    
+    <div class="tabs">
+      <div class="tab active" data-tab="scan">扫描</div>
+      <div class="tab" data-tab="batch">批量扫描</div>
+      <div class="tab" data-tab="behavior">行为模拟</div>
+      <div class="tab" data-tab="fingerprint">指纹保护</div>
+      <div class="tab" data-tab="settings">设置</div>
+    </div>
+    
+    <!-- 扫描标签页 -->
+    <div class="tab-content active" id="scan-tab">
+      <div class="form-group">
+        <label for="target-url">目标URL</label>
+        <input type="text" id="target-url" placeholder="https://example.com">
+      </div>
+      
+      <div class="form-group">
+        <label for="scan-depth">扫描深度</label>
+        <select id="scan-depth">
+          <option value="light">轻量 (仅首页)</option>
+          <option value="medium" selected>中等 (首页+直接链接)</option>
+          <option value="deep">深度 (全站扫描)</option>
+        </select>
+      </div>
+      
+      <div class="form-group">
+        <label for="vulnerability-types">漏洞类型</label>
+        <select id="vulnerability-types" multiple size="5">
+          <option value="xss" selected>XSS (跨站脚本)</option>
+          <option value="sqli" selected>SQL注入</option>
+          <option value="csrf" selected>CSRF (跨站请求伪造)</option>
+          <option value="ssrf" selected>SSRF (服务器端请求伪造)</option>
+          <option value="open-redirect" selected>开放重定向</option>
+          <option value="info-leak" selected>信息泄露</option>
+          <option value="xxe" selected>XXE (XML外部实体)</option>
+          <option value="cors" selected>CORS错误配置</option>
+          <option value="jwt" selected>JWT弱点</option>
+        </select>
+        <small>按住Ctrl键可多选</small>
+      </div>
+      
+      <button id="start-scan">开始扫描</button>
+      <button id="view-report" class="secondary">查看检测报告</button>
+      
+      <div class="status" id="scan-status">
+        <div id="status-text">准备扫描...</div>
+        <div class="progress">
+          <div class="progress-bar" id="scan-progress"></div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- 批量扫描标签页 -->
+    <div class="tab-content" id="batch-tab">
+      <div class="form-group">
+        <label for="batch-urls">目标URL列表 (每行一个)</label>
+        <textarea id="batch-urls" placeholder="https://example1.com&#10;https://example2.com&#10;https://example3.com"></textarea>
+      </div>
+      
+      <div class="form-group">
+        <label for="batch-interval">站点间隔 (秒)</label>
+        <input type="number" id="batch-interval" value="60" min="30">
+      </div>
+      
+      <div class="form-group">
+        <label for="batch-depth">扫描深度</label>
+        <select id="batch-depth">
+          <option value="light" selected>轻量 (仅首页)</option>
+          <option value="medium">中等 (首页+直接链接)</option>
+          <option value="deep">深度 (全站扫描)</option>
+        </select>
+      </div>
+      
+      <button id="start-batch">开始批量扫描</button>
+      
+      <div class="status" id="batch-status">
+        <div id="batch-status-text">准备批量扫描...</div>
+        <div class="progress">
+          <div class="progress-bar" id="batch-progress"></div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- 行为模拟标签页 -->
+    <div class="tab-content" id="behavior-tab">
+      <div class="form-group">
+        <label>人格类型</label>
+        <div class="personality-types">
+          <div class="personality-type" data-type="methodical">
+            <div class="icon">🧠</div>
+            <div class="name">条理型</div>
+          </div>
+          <div class="personality-type" data-type="impulsive">
+            <div class="icon">⚡</div>
+            <div class="name">冲动型</div>
+          </div>
+          <div class="personality-type active" data-type="thorough">
+            <div class="icon">🔍</div>
+            <div class="name">细致型</div>
+          </div>
+          <div class="personality-type" data-type="casual">
+            <div class="icon">🦋</div>
+            <div class="name">随意型</div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="collapsible">鼠标行为设置</div>
+      <div class="collapsible-content">
+        <div class="settings-group">
+          <div class="settings-row">
+            <label for="mouse-speed">鼠标速度</label>
+            <input type="range" id="mouse-speed" min="400" max="1500" value="800">
+            <div class="value">800</div>
+          </div>
+          <div class="settings-row">
+            <label for="mouse-precision">精确度</label>
+            <input type="range" id="mouse-precision" min="0.5" max="1" step="0.05" value="0.8">
+            <div class="value">0.8</div>
+          </div>
+          <div class="settings-row">
+            <label for="mouse-jitter">抖动量</label>
+            <input type="range" id="mouse-jitter" min="0" max="3" step="0.1" value="0.5">
+            <div class="value">0.5</div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="collapsible">键盘输入设置</div>
+      <div class="collapsible-content">
+        <div class="settings-group">
+          <div class="settings-row">
+            <label for="typing-speed">打字速度</label>
+            <input type="range" id="typing-speed" min="100" max="400" value="200">
+            <div class="value">200</div>
+          </div>
+          <div class="settings-row">
+            <label for="error-rate">错误率</label>
+            <input type="range" id="error-rate" min="0" max="0.2" step="0.01" value="0.05">
+            <div class="value">0.05</div>
+          </div>
+          <div class="settings-row">
+            <label for="correction-probability">纠错概率</label>
+            <input type="range" id="correction-probability" min="0.5" max="1" step="0.05" value="0.8">
+            <div class="value">0.8</div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="collapsible">阅读行为设置</div>
+      <div class="collapsible-content">
+        <div class="settings-group">
+          <div class="settings-row">
+            <label for="reading-speed">阅读速度</label>
+            <input type="range" id="reading-speed" min="100" max="400" value="200">
+            <div class="value">200</div>
+          </div>
+          <div class="settings-row">
+            <label for="scanning-probability">扫描概率</label>
+            <input type="range" id="scanning-probability" min="0" max="0.8" step="0.05" value="0.3">
+            <div class="value">0.3</div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="collapsible">注意力设置</div>
+      <div class="collapsible-content">
+        <div class="settings-group">
+          <div class="settings-row">
+            <label for="attention-span">注意力持续时间 (秒)</label>
+            <input type="range" id="attention-span" min="5" max="60" value="15">
+            <div class="value">15</div>
+          </div>
+          <div class="settings-row">
+            <label for="distraction-probability">分心概率</label>
+            <input type="range" id="distraction-probability" min="0" max="0.3" step="0.01" value="0.05">
+            <div class="value">0.05</div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="collapsible">休息设置</div>
+      <div class="collapsible-content">
+        <div class="settings-group">
+          <div class="settings-row">
+            <label for="break-interval">休息间隔 (分钟)</label>
+            <input type="range" id="break-interval" min="5" max="60" value="15">
+            <div class="value">15</div>
+          </div>
+          <div class="settings-row">
+            <label for="break-duration">休息时长 (秒)</label>
+            <input type="range" id="break-duration" min="10" max="120" value="30">
+            <div class="value">30</div>
+          </div>
+        </div>
+      </div>
+      
+      <button id="save-behavior">保存行为设置</button>
+      <button id="reset-behavior" class="tertiary">重置为默认值</button>
+    </div>
+    
+    <!-- 指纹保护标签页 -->
+    <div class="tab-content" id="fingerprint-tab">
+      <div class="form-group">
+        <div class="settings-row">
+          <label for="fingerprint-protection">启用指纹保护</label>
+          <label class="switch">
+            <input type="checkbox" id="fingerprint-protection" checked>
+            <span class="slider"></span>
+          </label>
+        </div>
+      </div>
+      
+      <div class="collapsible">浏览器指纹设置</div>
+      <div class="collapsible-content">
+        <div class="settings-group">
+          <div class="settings-row">
+            <label for="user-agent">User-Agent</label>
+            <select id="user-agent">
+              <option value="chrome-win">Chrome (Windows)</option>
+              <option value="chrome-mac">Chrome (macOS)</option>
+              <option value="firefox-win">Firefox (Windows)</option>
+              <option value="firefox-mac">Firefox (macOS)</option>
+              <option value="edge-win">Edge (Windows)</option>
+              <option value="safari-mac">Safari (macOS)</option>
+            </select>
+          </div>
+          <div class="settings-row">
+            <label for="screen-resolution">屏幕分辨率</label>
+            <select id="screen-resolution">
+              <option value="1920x1080">1920 x 1080</option>
+              <option value="1366x768">1366 x 768</option>
+              <option value="1440x900">1440 x 900</option>
+              <option value="1536x864">1536 x 864</option>
+              <option value="2560x1440">2560 x 1440</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      
+      <div class="collapsible">动态指纹设置</div>
+      <div class="collapsible-content">
+        <div class="settings-group">
+          <div class="settings-row">
+            <label for="dynamic-fingerprint">启用动态指纹</label>
+            <label class="switch">
+              <input type="checkbox" id="dynamic-fingerprint" checked>
+              <span class="slider"></span>
+            </label>
+          </div>
+          <div class="settings-row">
+            <label for="change-interval">变化间隔 (分钟)</label>
+            <input type="range" id="change-interval" min="10" max="60" value="30">
+            <div class="value">30</div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="collapsible">TCP/IP指纹设置</div>
+      <div class="collapsible-content">
+        <div class="settings-group">
+          <div class="settings-row">
+            <label for="tcp-fingerprint">启用TCP/IP指纹混淆</label>
+            <label class="switch">
+              <input type="checkbox" id="tcp-fingerprint" checked>
+              <span class="slider"></span>
+            </label>
+          </div>
+          <div class="settings-row">
+            <label for="tcp-profile">TCP/IP配置文件</label>
+            <select id="tcp-profile">
+              <option value="chrome-win">Chrome (Windows)</option>
+              <option value="firefox-win">Firefox (Windows)</option>
+              <option value="safari-mac">Safari (macOS)</option>
+              <option value="edge-win">Edge (Windows)</option>
+              <option value="random">随机 (每次连接)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      
+      <button id="save-fingerprint">保存指纹设置</button>
+      <button id="test-fingerprint" class="tertiary">测试指纹保护</button>
+    </div>
+    
+    <!-- 设置标签页 -->
+    <div class="tab-content" id="settings-tab">
+      <div class="form-group">
+        <div class="settings-row">
+          <label for="auto-update">自动更新漏洞库</label>
+          <label class="switch">
+            <input type="checkbox" id="auto-update" checked>
+            <span class="slider"></span>
+          </label>
+        </div>
+      </div>
+      
+      <div class="form-group">
+        <div class="settings-row">
+          <label for="respect-robots">遵守robots.txt</label>
+          <label class="switch">
+            <input type="checkbox" id="respect-robots" checked>
+            <span class="slider"></span>
+          </label>
+        </div>
+      </div>
+      
+      <div class="form-group">
+        <div class="settings-row">
+          <label for="safe-mode">安全模式 (避免危险操作)</label>
+          <label class="switch">
+            <input type="checkbox" id="safe-mode" checked>
+            <span class="slider"></span>
+          </label>
+        </div>
+      </div>
+      
+      <div class="form-group">
+        <label for="report-format">报告格式</label>
+        <select id="report-format">
+          <option value="html">HTML</option>
+          <option value="json">JSON</option>
+          <option value="csv">CSV</option>
+          <option value="markdown">Markdown</option>
+        </select>
+      </div>
+      
+      <div class="form-group">
+        <label for="proxy-settings">代理设置 (可选)</label>
+        <input type="text" id="proxy-settings" placeholder="http://proxy.example.com:8080">
+      </div>
+      
+      <button id="save-settings">保存设置</button>
+      <button id="clear-data" class="tertiary">清除所有数据</button>
+    </div>
+  </div>
+  
+  <script src="popup.js"></script>
+</body>
+</html> 

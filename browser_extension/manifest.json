@@ -48,7 +48,7 @@
     }]
   },
   "web_accessible_resources": [{
-    "resources": ["*.js", "app.ico"],
+    "resources": ["*.js", "app.ico", "injected_scripts/*"],
     "matches": ["<all_urls>"]
   }]
 }

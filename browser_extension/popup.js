@@ -49,6 +49,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const exportCsvButton = safeGetElement('export-csv');
   const collapsibles = safeQuerySelectorAll('.collapsible');
   
+  // 获取高级设置子标签
+  const subTabs = safeQuerySelectorAll('.sub-tab');
+  const subTabContents = safeQuerySelectorAll('.sub-tab-content');
+  
   // 滑块元素
   const mouseSpeedSlider = safeGetElement('mouse-speed');
   const typingSpeedSlider = safeGetElement('typing-speed');
@@ -111,6 +115,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // 初始化设置
   loadSettings();
   
+  // 初始化子标签页
+  initSubTabs();
+  
   // 安全地添加事件监听器
   function safeAddEventListener(element, event, callback) {
     if (element) {
@@ -143,6 +150,84 @@ document.addEventListener('DOMContentLoaded', () => {
       } else if (tabId === 'results') {
         document.getElementById('results-mode').classList.add('active');
         loadRecentResults();
+      }
+    });
+  });
+  
+  // 高级设置子标签页切换功能
+  subTabs.forEach(subTab => {
+    safeAddEventListener(subTab, 'click', () => {
+      // 更新子标签激活状态
+      subTabs.forEach(t => t.classList.remove('active'));
+      subTab.classList.add('active');
+      
+      // 隐藏所有子标签内容
+      subTabContents.forEach(content => {
+        content.style.display = 'none';
+      });
+      
+      // 显示对应子标签内容
+      const subTabId = subTab.dataset.subtab;
+      if (subTabId) {
+        const contentElement = document.getElementById(`${subTabId}-tab`);
+        if (contentElement) {
+          contentElement.style.display = 'block';
+        }
+      }
+    });
+  });
+  
+  // 人格类型选择
+  const personalityTypes = safeQuerySelectorAll('.personality-type');
+  
+  // 移除可能的滑动指示器
+  const existingSlider = document.querySelector('.personality-slider');
+  if (existingSlider) {
+    existingSlider.parentNode.removeChild(existingSlider);
+  }
+  
+  personalityTypes.forEach(personality => {
+    safeAddEventListener(personality, 'click', () => {
+      // 移除其他人格类型的激活状态
+      personalityTypes.forEach(p => p.classList.remove('active'));
+      // 激活当前选择的人格类型
+      personality.classList.add('active');
+      
+      // 保存选择的人格类型
+      const personalityType = personality.dataset.personality;
+      if (personalityType) {
+        // 根据人格类型调整相关设置
+        switch (personalityType) {
+          case 'methodical':
+            // 条理型：中等鼠标速度，中等打字速度，较长操作间隔
+            mouseSpeedSlider.value = 3;
+            typingSpeedSlider.value = 3;
+            operationIntervalSlider.value = 4;
+            break;
+          case 'impulsive':
+            // 冲动型：快速鼠标移动，快速打字，短操作间隔
+            mouseSpeedSlider.value = 5;
+            typingSpeedSlider.value = 5;
+            operationIntervalSlider.value = 2;
+            break;
+          case 'thorough':
+            // 细致型：慢速鼠标移动，中等打字速度，长操作间隔
+            mouseSpeedSlider.value = 2;
+            typingSpeedSlider.value = 3;
+            operationIntervalSlider.value = 5;
+            break;
+          case 'casual':
+            // 随意型：中等鼠标速度，不规则节奏，中等操作间隔
+            mouseSpeedSlider.value = 3;
+            typingSpeedSlider.value = 4;
+            operationIntervalSlider.value = 3;
+            break;
+        }
+        
+        // 更新滑块显示值
+        updateSliderValue(mouseSpeedSlider, mouseSpeedValue);
+        updateSliderValue(typingSpeedSlider, typingSpeedValue);
+        updateSliderValue(operationIntervalSlider, operationIntervalValue);
       }
     });
   });
@@ -789,5 +874,22 @@ document.addEventListener('DOMContentLoaded', () => {
         document.body.removeChild(notification);
       }, 500);
     }, 2000);
+  }
+  
+  // 初始化子标签页
+  function initSubTabs() {
+    // 默认选中第一个子标签
+    if (subTabs.length > 0) {
+      subTabs[0].classList.add('active');
+    }
+    
+    // 确保只有第一个子标签内容显示
+    subTabContents.forEach((content, index) => {
+      if (index === 0) {
+        content.style.display = 'block';
+      } else {
+        content.style.display = 'none';
+      }
+    });
   }
 }); 

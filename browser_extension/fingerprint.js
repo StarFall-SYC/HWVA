@@ -167,124 +167,154 @@ class FingerprintObfuscator {
   obfuscateUserAgent() {
     const userAgent = this.settings.currentUserAgent;
     
-    // 注入脚本覆盖navigator.userAgent
-    this.injectScript(`
-      Object.defineProperty(navigator, 'userAgent', {
-        get: function() { return '${userAgent}'; }
-      });
-    `);
+    // 使用chrome.scripting API执行外部脚本
+    this.safeSendMessage({
+      action: 'executeScript',
+      scriptContent: `
+        if (window.fingerprintObfuscator) {
+          window.fingerprintObfuscator.obfuscateUserAgent("${userAgent}");
+        } else {
+          // 如果外部脚本未加载，使用内联方法
+          Object.defineProperty(navigator, 'userAgent', {
+            get: function() { return "${userAgent}"; }
+          });
+        }
+      `
+    });
   }
   
   // 混淆屏幕分辨率
   obfuscateScreenResolution() {
     const { width, height } = this.settings.screenResolution;
     
-    // 注入脚本覆盖screen属性
-    this.injectScript(`
-      Object.defineProperty(screen, 'width', {
-        get: function() { return ${width}; }
-      });
-      Object.defineProperty(screen, 'height', {
-        get: function() { return ${height}; }
-      });
-      Object.defineProperty(screen, 'availWidth', {
-        get: function() { return ${width}; }
-      });
-      Object.defineProperty(screen, 'availHeight', {
-        get: function() { return ${height}; }
-      });
-      Object.defineProperty(window, 'innerWidth', {
-        get: function() { return ${width}; }
-      });
-      Object.defineProperty(window, 'innerHeight', {
-        get: function() { return ${height}; }
-      });
-      Object.defineProperty(window, 'outerWidth', {
-        get: function() { return ${width}; }
-      });
-      Object.defineProperty(window, 'outerHeight', {
-        get: function() { return ${height}; }
-      });
-    `);
+    // 使用chrome.scripting API执行外部脚本
+    this.safeSendMessage({
+      action: 'executeScript',
+      scriptContent: `
+        if (window.fingerprintObfuscator) {
+          window.fingerprintObfuscator.obfuscateScreenResolution(${width}, ${height});
+        } else {
+          // 如果外部脚本未加载，使用内联方法
+          Object.defineProperty(screen, 'width', {
+            get: function() { return ${width}; }
+          });
+          Object.defineProperty(screen, 'height', {
+            get: function() { return ${height}; }
+          });
+          Object.defineProperty(screen, 'availWidth', {
+            get: function() { return ${width}; }
+          });
+          Object.defineProperty(screen, 'availHeight', {
+            get: function() { return ${height}; }
+          });
+          Object.defineProperty(window, 'innerWidth', {
+            get: function() { return ${width}; }
+          });
+          Object.defineProperty(window, 'innerHeight', {
+            get: function() { return ${height}; }
+          });
+          Object.defineProperty(window, 'outerWidth', {
+            get: function() { return ${width}; }
+          });
+          Object.defineProperty(window, 'outerHeight', {
+            get: function() { return ${height}; }
+          });
+        }
+      `
+    });
   }
   
   // 混淆Canvas指纹
   obfuscateCanvas() {
     const { noiseLevel, noiseColor, noiseType } = this.settings.canvasNoise;
     
-    // 注入脚本覆盖Canvas方法
-    this.injectScript(`
-      // 保存原始方法
-      const originalToDataURL = HTMLCanvasElement.prototype.toDataURL;
-      const originalGetImageData = CanvasRenderingContext2D.prototype.getImageData;
-      
-      // 添加噪声函数
-      function addNoise(imageData) {
-        const pixels = imageData.data;
-        const noiseLevel = ${noiseLevel};
-        const noiseColor = ${noiseColor};
-        const noiseType = '${noiseType}';
-        
-        for (let i = 0; i < pixels.length; i += 4) {
-          // 根据噪声类型添加不同的噪声
-          if (noiseType === 'subtle') {
-            // 微妙的噪声 - 只在最低有效位上添加噪声
-            pixels[i] = pixels[i] & 0xFC | (Math.random() * 4) & 0x03;     // R
-            pixels[i+1] = pixels[i+1] & 0xFC | (Math.random() * 4) & 0x03; // G
-            pixels[i+2] = pixels[i+2] & 0xFC | (Math.random() * 4) & 0x03; // B
-          } else {
-            // 可见噪声 - 添加更明显的噪声
-            const noise = (Math.random() - 0.5) * noiseLevel * 255;
-            pixels[i] = Math.min(255, Math.max(0, pixels[i] + noise));     // R
-            pixels[i+1] = Math.min(255, Math.max(0, pixels[i+1] + noise)); // G
-            pixels[i+2] = Math.min(255, Math.max(0, pixels[i+2] + noise)); // B
+    // 使用chrome.scripting API执行外部脚本
+    this.safeSendMessage({
+      action: 'executeScript',
+      scriptContent: `
+        // 在页面中创建并执行一个<script>标签
+        const script = document.createElement('script');
+        script.textContent = \`
+          // 保存原始方法
+          const originalToDataURL = HTMLCanvasElement.prototype.toDataURL;
+          const originalGetImageData = CanvasRenderingContext2D.prototype.getImageData;
+          
+          // 添加噪声函数
+          function addNoise(imageData) {
+            const pixels = imageData.data;
+            const noiseLevel = ${noiseLevel};
+            const noiseColor = ${noiseColor};
+            const noiseType = '${noiseType}';
+            
+            for (let i = 0; i < pixels.length; i += 4) {
+              // 根据噪声类型添加不同的噪声
+              if (noiseType === 'subtle') {
+                // 微妙的噪声 - 只在最低有效位上添加噪声
+                pixels[i] = pixels[i] & 0xFC | (Math.random() * 4) & 0x03;     // R
+                pixels[i+1] = pixels[i+1] & 0xFC | (Math.random() * 4) & 0x03; // G
+                pixels[i+2] = pixels[i+2] & 0xFC | (Math.random() * 4) & 0x03; // B
+              } else {
+                // 可见噪声 - 添加更明显的噪声
+                const noise = (Math.random() - 0.5) * noiseLevel * 255;
+                pixels[i] = Math.min(255, Math.max(0, pixels[i] + noise));     // R
+                pixels[i+1] = Math.min(255, Math.max(0, pixels[i+1] + noise)); // G
+                pixels[i+2] = Math.min(255, Math.max(0, pixels[i+2] + noise)); // B
+              }
+            }
+            
+            return imageData;
           }
-        }
-        
-        return imageData;
-      }
-      
-      // 覆盖toDataURL方法
-      HTMLCanvasElement.prototype.toDataURL = function() {
-        // 检查是否是指纹检测
-        const isFingerprinting = new Error().stack.includes('CanvasFingerprint') ||
-                                 document.documentElement.innerHTML.includes('Fingerprint') ||
-                                 document.documentElement.innerHTML.includes('fingerprint');
-        
-        if (isFingerprinting || Math.random() < 0.5) {
-          // 获取原始图像数据
-          const context = this.getContext('2d');
-          const imageData = context.getImageData(0, 0, this.width, this.height);
           
-          // 添加噪声
-          const noisyImageData = addNoise(imageData);
+          // 覆盖toDataURL方法
+          HTMLCanvasElement.prototype.toDataURL = function() {
+            // 检查是否是指纹检测
+            const isFingerprinting = new Error().stack.includes('CanvasFingerprint') ||
+                                   document.documentElement.innerHTML.includes('Fingerprint') ||
+                                   document.documentElement.innerHTML.includes('fingerprint');
+            
+            if (isFingerprinting || Math.random() < 0.5) {
+              // 获取原始图像数据
+              const context = this.getContext('2d');
+              const imageData = context.getImageData(0, 0, this.width, this.height);
+              
+              // 添加噪声
+              const noisyImageData = addNoise(imageData);
+              
+              // 将修改后的图像数据放回Canvas
+              context.putImageData(noisyImageData, 0, 0);
+            }
+            
+            // 调用原始方法
+            return originalToDataURL.apply(this, arguments);
+          };
           
-          // 将修改后的图像数据放回Canvas
-          context.putImageData(noisyImageData, 0, 0);
-        }
-        
-        // 调用原始方法
-        return originalToDataURL.apply(this, arguments);
-      };
-      
-      // 覆盖getImageData方法
-      CanvasRenderingContext2D.prototype.getImageData = function() {
-        // 获取原始图像数据
-        const imageData = originalGetImageData.apply(this, arguments);
-        
-        // 检查是否是指纹检测
-        const isFingerprinting = new Error().stack.includes('CanvasFingerprint') ||
-                                 document.documentElement.innerHTML.includes('Fingerprint') ||
-                                 document.documentElement.innerHTML.includes('fingerprint');
-        
-        if (isFingerprinting || Math.random() < 0.5) {
-          // 添加噪声
-          return addNoise(imageData);
-        }
-        
-        return imageData;
-      };
-    `);
+          // 覆盖getImageData方法
+          CanvasRenderingContext2D.prototype.getImageData = function() {
+            // 获取原始图像数据
+            const imageData = originalGetImageData.apply(this, arguments);
+            
+            // 检查是否是指纹检测
+            const isFingerprinting = new Error().stack.includes('CanvasFingerprint') ||
+                                   document.documentElement.innerHTML.includes('Fingerprint') ||
+                                   document.documentElement.innerHTML.includes('fingerprint');
+            
+            if (isFingerprinting || Math.random() < 0.5) {
+              // 添加噪声
+              return addNoise(imageData);
+            }
+            
+            return imageData;
+          };
+        \`;
+        document.head.appendChild(script);
+        // 注入后立即移除script元素
+        setTimeout(() => {
+          if (script.parentNode) {
+            script.parentNode.removeChild(script);
+          }
+        }, 100);
+      `
+    });
   }
   
   // 混淆WebRTC
@@ -802,13 +832,29 @@ class FingerprintObfuscator {
     return true;
   }
   
-  // 注入脚本到页面
+  // 注入脚本到页面的通用方法，使用<script>标签方式
   injectScript(scriptContent) {
     try {
-      const script = document.createElement('script');
-      script.textContent = scriptContent;
-      document.documentElement.appendChild(script);
-      script.remove();
+      // 使用chrome.scripting.executeScript API注入脚本
+      this.safeSendMessage({
+        action: 'executeScript',
+        scriptContent: `
+          // 在页面中创建并执行一个<script>标签
+          const script = document.createElement('script');
+          script.textContent = \`${scriptContent.replace(/`/g, '\\`')}\`;
+          (document.head || document.documentElement).appendChild(script);
+          // 注入后立即移除script元素
+          setTimeout(() => {
+            if (script.parentNode) {
+              script.parentNode.removeChild(script);
+            }
+          }, 100);
+        `
+      }, (response) => {
+        if (response && response.error) {
+          console.error('脚本注入失败:', response.error);
+        }
+      });
     } catch (e) {
       console.error('指纹混淆脚本注入失败:', e);
     }

@@ -333,7 +333,7 @@ class DOMAnalyzer {
     
     try {
       // 获取元素位置
-      const rect = element.getBoundingClientRect();
+    const rect = element.getBoundingClientRect();
       const centerX = rect.left + rect.width / 2;
       const centerY = rect.top + rect.height / 2;
       
@@ -2336,7 +2336,7 @@ class VulnerabilityDetector {
       details: {
         ...details,
         location: window.location.href,
-        timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString()
       },
       timestamp: Date.now()
     };

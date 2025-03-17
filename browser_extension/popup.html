@@ -301,10 +301,49 @@
       font-size: 12px;
       color: #666;
     }
+    
+    /* 子标签样式 */
+    .sub-tabs {
+      display: flex;
+      margin-bottom: 15px;
+      border-radius: 4px;
+      overflow: hidden;
+      border: 1px solid #ddd;
+    }
+    .sub-tab {
+      flex: 1;
+      text-align: center;
+      padding: 8px;
+      background-color: #f5f5f5;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-size: 12px;
+    }
+    .sub-tab.active {
+      background-color: #34a853;
+      color: white;
+    }
+    .sub-tab:hover:not(.active) {
+      background-color: #e5e5e5;
+    }
+    .sub-tab-content {
+      display: none;
+      margin-bottom: 15px;
+    }
+    .sub-tab-content:first-of-type {
+      display: block;
+    }
+    
     .personality-types {
       display: flex;
       justify-content: space-between;
-      margin-bottom: 15px;
+      margin-bottom: 20px;
+      position: relative;
+      overflow: visible;
+      background: white;
+      border-radius: 4px;
+      padding: 5px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
     }
     .personality-type {
       flex: 1;
@@ -315,6 +354,15 @@
       cursor: pointer;
       margin: 0 5px;
       transition: all 0.2s;
+      position: relative;
+      z-index: 2;
+      background-color: #fff;
+    }
+    .personality-type:first-child {
+      margin-left: 0;
+    }
+    .personality-type:last-child {
+      margin-right: 0;
     }
     .personality-type:hover {
       background-color: #f5f5f5;
@@ -330,6 +378,17 @@
     .personality-type .name {
       font-weight: bold;
       font-size: 12px;
+    }
+    
+    /* 移除或修改导致问题的滑动条样式 */
+    .personality-slider {
+      position: absolute;
+      bottom: 0;
+      height: 4px;
+      background-color: #4285f4;
+      transition: all 0.3s ease;
+      z-index: 1;
+      display: none;
     }
     .collapsible {
       cursor: pointer;
@@ -391,6 +450,104 @@
     }
     input:checked + .slider:before {
       transform: translateX(20px);
+    }
+    
+    /* 修复行为模拟标签页布局 */
+    #behavior-tab {
+      padding: 10px;
+      background: white;
+      border-radius: 4px;
+      position: relative;
+      z-index: 1;
+    }
+    
+    #behavior-tab h4 {
+      margin-top: 15px;
+      margin-bottom: 10px;
+      font-size: 14px;
+      color: #555;
+      border-bottom: 1px solid #eee;
+      padding-bottom: 5px;
+      background: white;
+      position: relative;
+      z-index: 2;
+    }
+    
+    #behavior-tab .form-group {
+      margin-bottom: 20px;
+      position: relative;
+      z-index: 1;
+    }
+    
+    /* 确保滑动条不会干扰其他元素 */
+    input[type="range"] {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 8px;
+      border-radius: 4px;
+      background: #eee;
+      outline: none;
+      margin: 10px 0;
+      appearance: none; /* 添加标准属性 */
+    }
+    
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #4285f4;
+      cursor: pointer;
+      appearance: none;
+    }
+    
+    /* 确保滑动条标签不会被蓝色线条覆盖 */
+    .slider-container {
+      position: relative;
+      z-index: 2;
+      background-color: white;
+      padding: 5px 0;
+      margin-bottom: 10px;
+    }
+    
+    /* 恢复复选框样式 */
+    .checkbox-container {
+      display: flex;
+      align-items: center;
+      margin-bottom: 5px;
+      background: white;
+      position: relative;
+      z-index: 2;
+    }
+    
+    .checkbox-container input[type="checkbox"] {
+      width: auto;
+      margin-right: 5px;
+      -webkit-appearance: checkbox !important; /* 强制使用浏览器默认复选框样式 */
+      -moz-appearance: checkbox !important;
+      opacity: 1;
+      position: static;
+      pointer-events: auto;
+      height: auto;
+      appearance: checkbox !important; /* 将标准属性放在最后 */
+    }
+    
+    .checkbox-container label {
+      font-weight: normal;
+      margin-bottom: 0;
+      display: inline-block;
+      vertical-align: middle;
+    }
+    
+    /* 修复描述文本样式 */
+    .description {
+      color: #777;
+      font-size: 12px;
+      margin-top: 5px;
+      margin-bottom: 10px;
+      position: relative;
+      z-index: 2;
+      background: white;
     }
   </style>
 </head>
@@ -490,6 +647,119 @@
         <div class="sub-tab" data-subtab="batch">批处理</div>
       </div>
       
+      <!-- 指纹混淆设置 -->
+      <div class="sub-tab-content active" id="fingerprint-tab">
+        <div class="form-group">
+          <div class="checkbox-container">
+            <input type="checkbox" id="enable-fingerprint" checked>
+            <label for="enable-fingerprint">启用指纹混淆</label>
+          </div>
+          <p class="description">动态修改浏览器指纹，避免被目标网站识别为自动化工具</p>
+        </div>
+        
+        <div class="form-group">
+          <label for="fingerprint-interval">指纹更新间隔 (分钟)</label>
+          <input type="number" id="fingerprint-interval" min="5" max="120" value="30">
+          <p class="description">自动更新浏览器指纹的时间间隔</p>
+        </div>
+        
+        <div class="form-group">
+          <h4>混淆选项</h4>
+          <div class="checkbox-group">
+            <div class="checkbox-item">
+              <input type="checkbox" id="fp-useragent" checked>
+              <label for="fp-useragent">User-Agent</label>
+            </div>
+            <div class="checkbox-item">
+              <input type="checkbox" id="fp-canvas" checked>
+              <label for="fp-canvas">Canvas指纹</label>
+            </div>
+            <div class="checkbox-item">
+              <input type="checkbox" id="fp-webrtc" checked>
+              <label for="fp-webrtc">WebRTC</label>
+            </div>
+            <div class="checkbox-item">
+              <input type="checkbox" id="fp-fonts" checked>
+              <label for="fp-fonts">字体列表</label>
+            </div>
+            <div class="checkbox-item">
+              <input type="checkbox" id="fp-hardware" checked>
+              <label for="fp-hardware">硬件信息</label>
+            </div>
+            <div class="checkbox-item">
+              <input type="checkbox" id="fp-screen" checked>
+              <label for="fp-screen">屏幕分辨率</label>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- 行为模拟设置 -->
+      <div class="sub-tab-content" id="behavior-tab">
+        <div class="form-group">
+          <h4>人格类型</h4>
+          <div class="personality-types">
+            <div class="personality-type active" data-personality="methodical">
+              <div class="icon">📋</div>
+              <div class="name">条理型</div>
+            </div>
+            <div class="personality-type" data-personality="impulsive">
+              <div class="icon">⚡</div>
+              <div class="name">冲动型</div>
+            </div>
+            <div class="personality-type" data-personality="thorough">
+              <div class="icon">🔍</div>
+              <div class="name">细致型</div>
+            </div>
+            <div class="personality-type" data-personality="casual">
+              <div class="icon">🎭</div>
+              <div class="name">随意型</div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="form-group">
+          <h4>鼠标行为</h4>
+          <div class="slider-container">
+            <label for="mouse-speed">鼠标速度 <span id="mouse-speed-value">5</span></label>
+            <input type="range" id="mouse-speed" min="1" max="10" value="5" class="slider">
+          </div>
+        </div>
+        
+        <div class="form-group">
+          <h4>键盘行为</h4>
+          <div class="slider-container">
+            <label for="typing-speed">打字速度 <span id="typing-speed-value">5</span></label>
+            <input type="range" id="typing-speed" min="1" max="10" value="5" class="slider">
+          </div>
+        </div>
+        
+        <div class="form-group">
+          <h4>操作间隔</h4>
+          <div class="slider-container">
+            <label for="operation-interval">操作间隔 <span id="operation-interval-value">5</span></label>
+            <input type="range" id="operation-interval" min="1" max="10" value="5" class="slider">
+          </div>
+        </div>
+        
+        <div class="form-group">
+          <h4>高级选项</h4>
+          <div class="checkbox-container">
+            <input type="checkbox" id="enable-eye-tracking" checked>
+            <label for="enable-eye-tracking">模拟眼球移动</label>
+          </div>
+          <p class="description">模拟人类视觉注意力模式</p>
+        </div>
+        
+        <div class="form-group">
+          <div class="checkbox-container">
+            <input type="checkbox" id="enable-typos" checked>
+            <label for="enable-typos">模拟打字错误</label>
+          </div>
+          <p class="description">随机生成并修正打字错误，增加真实性</p>
+        </div>
+      </div>
+      
       <!-- 合规性设置 -->
       <div class="sub-tab-content" id="compliance-tab">
         <div class="form-group">
@@ -544,6 +814,11 @@
           </div>
           <p class="description">扫描完成后自动关闭浏览器标签页</p>
         </div>
+      </div>
+      
+      <!-- 保存设置按钮 -->
+      <div class="form-group" style="margin-top: 20px;">
+        <button id="save-settings" class="secondary">保存设置</button>
       </div>
     </div>
     

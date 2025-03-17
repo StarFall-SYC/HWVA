@@ -341,8 +341,62 @@ class HumanoidSimulator {
   }
 }
 
-// 初始化指纹混淆系统
+// 加载指纹混淆外部脚本
+function loadFingerprintObfuscatorScript(tabId) {
+  return new Promise((resolve, reject) => {
+    try {
+      // 首先验证标签页是否存在
+      chrome.tabs.get(tabId, (tab) => {
+        if (chrome.runtime.lastError) {
+          console.error(`标签页 ${tabId} 不存在:`, chrome.runtime.lastError.message);
+          reject(new Error(`标签页不存在: ${chrome.runtime.lastError.message}`));
+          return;
+        }
+        
+        // 确保标签页URL是http或https开头
+        if (!tab.url || (!tab.url.startsWith('http://') && !tab.url.startsWith('https://'))) {
+          console.error(`标签页 ${tabId} URL不是http/https:`, tab.url);
+          reject(new Error(`标签页URL不支持: ${tab.url}`));
+          return;
+        }
+        
+        // 如果标签页存在且URL有效，尝试执行脚本
+        chrome.scripting.executeScript({
+          target: { tabId: tabId },
+          files: ['injected_scripts/fingerprint_obfuscator.js']
+        }).then(() => {
+          console.log(`指纹混淆脚本已在标签页 ${tabId} 上加载`);
+          resolve(true);
+        }).catch(error => {
+          console.error(`在标签页 ${tabId} 加载指纹混淆脚本失败:`, error);
+          reject(error);
+        });
+      });
+    } catch (error) {
+      console.error('尝试加载指纹混淆脚本时出错:', error);
+      reject(error);
+    }
+  });
+}
+
+// 初始化指纹混淆
 function initFingerprintObfuscation() {
+  // 监听标签页更新，加载指纹混淆脚本
+  chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+    // 只在页面完全加载后且URL是http/https时执行
+    if (changeInfo.status === 'complete' && tab.url && 
+        (tab.url.startsWith('http://') || tab.url.startsWith('https://'))) {
+      
+      // 使用延迟加载，确保DOM已完全准备好
+      setTimeout(() => {
+        loadFingerprintObfuscatorScript(tabId).catch(error => {
+          console.error(`在标签页 ${tabId} 加载指纹混淆脚本失败:`, error);
+          // 出错时不重试，避免无限循环
+        });
+      }, 500); // 延迟500毫秒
+    }
+  });
+  
   // 使用更高效的方式定期更新浏览器指纹
   let updateIntervalId;
   
@@ -856,6 +910,67 @@ function init() {
         tabId: sender.tab.id
       });
       sendResponse({ success: true });
+    } else if (message.action === 'executeScript') {
+      // 处理脚本执行请求
+      if (sender.tab && sender.tab.id) {
+        try {
+          // 首先验证标签页是否仍然存在
+          chrome.tabs.get(sender.tab.id, (tab) => {
+            if (chrome.runtime.lastError) {
+              console.error(`标签页 ${sender.tab.id} 不存在:`, chrome.runtime.lastError.message);
+              sendResponse({ success: false, error: `标签页不存在: ${chrome.runtime.lastError.message}` });
+              return;
+            }
+            
+            // 确保URL是有效的HTTP/HTTPS URL
+            if (!tab.url || (!tab.url.startsWith('http://') && !tab.url.startsWith('https://'))) {
+              console.error(`标签页 ${sender.tab.id} URL不是http/https:`, tab.url);
+              sendResponse({ success: false, error: `标签页URL不支持: ${tab.url}` });
+              return;
+            }
+            
+            // 直接注入代码，不使用Function构造函数
+            chrome.scripting.executeScript({
+              target: { tabId: sender.tab.id },
+              func: (code) => {
+                try {
+                  // 创建并执行脚本元素的安全方法
+                  const script = document.createElement('script');
+                  script.textContent = code;
+                  document.head.appendChild(script);
+                  setTimeout(() => {
+                    if (script.parentNode) {
+                      script.parentNode.removeChild(script);
+                    }
+                  }, 100);
+                  return { success: true };
+                } catch (error) {
+                  console.error('执行脚本失败:', error);
+                  return { success: false, error: error.message };
+                }
+              },
+              args: [message.scriptContent],
+              world: "MAIN"
+            }).then(results => {
+              if (results && results[0] && results[0].result) {
+                sendResponse(results[0].result);
+              } else {
+                sendResponse({ success: false, error: '执行结果未知' });
+              }
+            }).catch(error => {
+              console.error(`chrome.scripting.executeScript 在标签页 ${sender.tab.id} 上失败:`, error);
+              sendResponse({ success: false, error: error.message });
+            });
+          });
+          return true; // 异步响应
+        } catch (outerError) {
+          console.error('尝试执行脚本时出错:', outerError);
+          sendResponse({ success: false, error: outerError.message });
+        }
+      } else {
+        console.error('无法确定标签页ID');
+        sendResponse({ success: false, error: '无法确定标签页ID' });
+      }
     } else if (message.action === 'getFingerprint') {
       // 获取当前指纹设置
       chrome.storage.local.get([
@@ -869,7 +984,7 @@ function init() {
       ], result => {
         sendResponse(result);
       });
-      return true; // 保持消息通道开放，以便异步响应
+      return true; // 异步响应
     } else if (message.action === 'exportReport') {
       // 导出报告
       generateReport().then(report => {

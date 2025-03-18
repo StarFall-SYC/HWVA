@@ -1358,7 +1358,7 @@ class VulnerabilityDetector {
     try {
       if (chrome && chrome.runtime && chrome.runtime.sendMessage) {
         chrome.runtime.sendMessage(message, callback || function() {});
-      } else {
+    } else {
         console.warn('chrome.runtime.sendMessage 不可用');
         if (callback) callback({error: 'chrome.runtime.sendMessage 不可用'});
       }
@@ -1376,7 +1376,7 @@ class VulnerabilityDetector {
       details: {
         ...details,
         location: window.location.href,
-        timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString()
       },
       timestamp: Date.now()
     };

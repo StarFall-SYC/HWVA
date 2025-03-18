@@ -1011,6 +1011,11 @@ function init() {
     } else if (message.action === 'getVulnerabilities') {
       // 返回已检测到的漏洞
       sendResponse(humanoidSimulator.detectedVulnerabilities);
+    } else if (message.action === 'clearVulnerabilities') {
+      // 清空漏洞数据
+      humanoidSimulator.detectedVulnerabilities = [];
+      humanoidSimulator.saveVulnerabilities();
+      sendResponse({ success: true });
     } else if (message.action === 'updateFingerprint') {
       // 更新指纹设置
       updateBrowserFingerprint(message.settings);

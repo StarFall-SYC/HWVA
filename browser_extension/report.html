@@ -973,6 +973,58 @@
       border-left-color: #7f8c8d;
     }
     
+    /* 优化URL和证据内容的显示，添加滚动条 */
+    #domain-vulnerabilities .vulnerability-details {
+      display: grid;
+      grid-template-columns: 100px 1fr;
+      row-gap: 10px;
+      margin-top: 10px;
+    }
+    
+    #domain-vulnerabilities .url-content,
+    #domain-vulnerabilities .evidence {
+      background-color: #f0f0f0;
+      padding: 8px;
+      border-radius: 4px;
+      border: 1px solid #e0e0e0;
+      max-height: 120px;
+      overflow-y: auto;
+      overflow-x: hidden;
+      word-break: break-word;
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    
+    #domain-vulnerabilities .url-content {
+      font-family: monospace;
+      white-space: nowrap;
+      max-height: 60px;
+    }
+    
+    #domain-vulnerabilities .url-content::-webkit-scrollbar,
+    #domain-vulnerabilities .evidence::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    
+    #domain-vulnerabilities .url-content::-webkit-scrollbar-thumb,
+    #domain-vulnerabilities .evidence::-webkit-scrollbar-thumb {
+      background-color: #c0c0c0;
+      border-radius: 3px;
+    }
+    
+    #domain-vulnerabilities .url-content::-webkit-scrollbar-track,
+    #domain-vulnerabilities .evidence::-webkit-scrollbar-track {
+      background-color: #f0f0f0;
+      border-radius: 3px;
+    }
+    
+    #domain-vulnerabilities .evidence {
+      font-family: monospace;
+      white-space: pre-wrap;
+      max-height: 150px;
+    }
+    
     /* 无数据提示样式 */
     .no-data {
       display: flex;

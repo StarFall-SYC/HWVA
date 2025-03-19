@@ -2653,6 +2653,7 @@ document.addEventListener('DOMContentLoaded', () => {
       detailsDiv.appendChild(urlLabelDiv);
       
       const urlValueDiv = document.createElement('div');
+      urlValueDiv.className = 'url-content';
       const urlLink = document.createElement('a');
       urlLink.href = vuln.details.location;
       urlLink.textContent = vuln.details.location;
@@ -2689,6 +2690,7 @@ document.addEventListener('DOMContentLoaded', () => {
       detailsDiv.appendChild(evidenceLabelDiv);
       
       const evidenceValueDiv = document.createElement('div');
+      evidenceValueDiv.className = 'evidence';
       evidenceValueDiv.textContent = vuln.details.evidence || '无详细信息';
       detailsDiv.appendChild(evidenceValueDiv);
       

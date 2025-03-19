@@ -382,14 +382,9 @@
     
     /* 移除或修改导致问题的滑动条样式 */
     .personality-slider {
-      position: absolute;
-      bottom: 0;
-      height: 4px;
-      background-color: #4285f4;
-      transition: all 0.3s ease;
-      z-index: 1;
-      display: none;
+      display: none; /* 完全隐藏这个有问题的元素 */
     }
+    
     .collapsible {
       cursor: pointer;
       padding: 10px;
@@ -474,21 +469,25 @@
     }
     
     #behavior-tab .form-group {
-      margin-bottom: 20px;
+      margin-bottom: 25px; /* 增加垂直间距 */
       position: relative;
       z-index: 1;
+      clear: both; /* 确保不会有浮动元素影响布局 */
     }
     
     /* 确保滑动条不会干扰其他元素 */
     input[type="range"] {
       -webkit-appearance: none;
+      -moz-appearance: none;
       width: 100%;
       height: 8px;
       border-radius: 4px;
       background: #eee;
       outline: none;
       margin: 10px 0;
-      appearance: none; /* 添加标准属性 */
+      position: relative;
+      z-index: 1;
+      appearance: none;
     }
     
     input[type="range"]::-webkit-slider-thumb {
@@ -498,7 +497,8 @@
       border-radius: 50%;
       background: #4285f4;
       cursor: pointer;
-      appearance: none;
+      position: relative;
+      z-index: 2;
     }
     
     /* 确保滑动条标签不会被蓝色线条覆盖 */
@@ -507,47 +507,45 @@
       z-index: 2;
       background-color: white;
       padding: 5px 0;
-      margin-bottom: 10px;
+      margin-bottom: 15px; /* 增加边距 */
+      clear: both; /* 确保不受前面元素影响 */
     }
     
-    /* 恢复复选框样式 */
+    /* 确保复选框正常显示 */
     .checkbox-container {
       display: flex;
       align-items: center;
-      margin-bottom: 5px;
+      margin-bottom: 10px;
       background: white;
       position: relative;
       z-index: 2;
+      padding: 5px 0;
+      clear: both;
     }
     
     .checkbox-container input[type="checkbox"] {
       width: auto;
-      margin-right: 5px;
-      -webkit-appearance: checkbox !important; /* 强制使用浏览器默认复选框样式 */
-      -moz-appearance: checkbox !important;
+      margin-right: 8px;
+      -webkit-appearance: checkbox;
+      -moz-appearance: checkbox;
       opacity: 1;
       position: static;
       pointer-events: auto;
       height: auto;
-      appearance: checkbox !important; /* 将标准属性放在最后 */
+      appearance: checkbox;
     }
     
-    .checkbox-container label {
-      font-weight: normal;
-      margin-bottom: 0;
-      display: inline-block;
-      vertical-align: middle;
-    }
-    
-    /* 修复描述文本样式 */
+    /* 确保描述文本正确显示 */
     .description {
       color: #777;
       font-size: 12px;
-      margin-top: 5px;
-      margin-bottom: 10px;
+      margin-top: 3px;
+      margin-bottom: 12px;
       position: relative;
       z-index: 2;
       background: white;
+      padding: 2px 0;
+      clear: both;
     }
     
     /* 漏洞检测设置样式 */
@@ -606,6 +604,51 @@
       margin-top: 5px;
       color: #666;
       font-size: 0.8em;
+    }
+  </style>
+  
+  <!-- 添加额外的修复样式 -->
+  <style>
+    /* 确保复选框正常显示 */
+    #behavior-tab .checkbox-container {
+      display: flex;
+      align-items: center;
+      margin-bottom: 10px;
+      background: white;
+      position: relative;
+      z-index: 3;
+      padding: 5px 0;
+      clear: both;
+    }
+    
+    #behavior-tab .checkbox-container input[type="checkbox"] {
+      width: auto;
+      height: auto;
+      margin-right: 8px;
+      position: static;
+      opacity: 1;
+      pointer-events: auto;
+      -webkit-appearance: checkbox;
+      -moz-appearance: checkbox;
+      appearance: checkbox;
+    }
+    
+    #behavior-tab .description {
+      color: #777;
+      font-size: 12px;
+      margin-top: 3px;
+      margin-bottom: 12px;
+      position: relative;
+      z-index: 3;
+      background: white;
+      padding: 2px 0;
+      clear: both;
+    }
+    
+    /* 修复高级选项标题 */
+    #behavior-tab h4:last-of-type {
+      margin-top: 20px;
+      clear: both;
     }
   </style>
 </head>

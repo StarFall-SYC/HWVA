@@ -106,6 +106,18 @@ document.addEventListener('DOMContentLoaded', () => {
       maxParallel: 1,
       timeout: 30,
       autoCloseTabs: true
+    },
+    vulnerabilityDetection: {
+      detectionMode: 'active',
+      detectionDepth: 3,
+      vulnerabilityTypes: {
+        xss: true,
+        sqli: true,
+        csrf: true,
+        ssrf: true,
+        infoLeakage: true,
+        headers: true
+      }
     }
   };
   
@@ -260,8 +272,29 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // 保存设置
   safeAddEventListener(saveSettingsButton, 'click', () => {
+    // 更新人类行为设置
+    currentSettings.humanBehavior.mouseSpeed = parseInt(mouseSpeedSlider.value);
+    currentSettings.humanBehavior.typingSpeed = parseInt(typingSpeedSlider.value);
+    currentSettings.humanBehavior.operationInterval = parseInt(operationIntervalSlider.value);
+    
+    // 更新指纹伪装设置
+    currentSettings.fingerprint.enabled = safeGetElement('enable-fingerprint').checked;
+    currentSettings.fingerprint.updateInterval = parseInt(safeGetElement('fingerprint-interval').value) || 30;
+    currentSettings.fingerprint.userAgent = safeGetElement('fp-useragent').checked;
+    currentSettings.fingerprint.canvas = safeGetElement('fp-canvas').checked;
+    currentSettings.fingerprint.webrtc = safeGetElement('fp-webrtc').checked;
+    currentSettings.fingerprint.fonts = safeGetElement('fp-fonts').checked;
+    currentSettings.fingerprint.hardware = safeGetElement('fp-hardware').checked;
+    currentSettings.fingerprint.screen = safeGetElement('fp-screen').checked;
+    
+    // 更新漏洞检测设置
+    updateVulnerabilitySettingsFromUI();
+    
+    // 保存所有设置
     saveSettings();
-    showNotification('设置已保存');
+    
+    // 显示保存成功提示
+    alert('设置已保存');
   });
   
   // 重置设置
@@ -329,6 +362,9 @@ document.addEventListener('DOMContentLoaded', () => {
     progressBar.style.width = '0%';
     currentTarget.textContent = `当前目标: ${targetUrl}`;
     
+    // 准备漏洞检测设置
+    prepareVulnerabilityDetection();
+    
     // 使用chrome API打开新标签页
     chrome.tabs.create({ url: targetUrl }, (tab) => {
       // 发送消息到content script
@@ -393,6 +429,9 @@ document.addEventListener('DOMContentLoaded', () => {
     statusText.textContent = `共${totalSites}个目标，正在扫描第1个`;
     progressBar.style.width = '0%';
     currentTarget.textContent = `当前目标: ${targetSites[0]}`;
+    
+    // 准备漏洞检测设置
+    prepareVulnerabilityDetection();
     
     // 开始批量扫描
     scanNextSite(scanDepth, scanInterval, vulnerabilityTypes);
@@ -891,5 +930,160 @@ document.addEventListener('DOMContentLoaded', () => {
         content.style.display = 'none';
       }
     });
+  }
+  
+  // 漏洞检测设置元素
+  const detectionModeSelect = safeGetElement('detection-mode');
+  const detectionDepthSlider = safeGetElement('detection-depth');
+  const detectXssCheckbox = safeGetElement('detect-xss');
+  const detectSqliCheckbox = safeGetElement('detect-sqli');
+  const detectCsrfCheckbox = safeGetElement('detect-csrf');
+  const detectSsrfCheckbox = safeGetElement('detect-ssrf');
+  const detectInfoLeakageCheckbox = safeGetElement('detect-info-leakage');
+  const detectHeadersCheckbox = safeGetElement('detect-headers');
+  const resetVulnerabilitySettingsBtn = safeGetElement('reset-vulnerability-settings');
+  
+  // 默认漏洞检测设置
+  const defaultVulnerabilitySettings = {
+    detectionMode: 'active',
+    detectionDepth: 3,
+    vulnerabilityTypes: {
+      xss: true,
+      sqli: true,
+      csrf: true,
+      ssrf: true,
+      infoLeakage: true,
+      headers: true
+    }
+  };
+  
+  // 当前漏洞检测设置
+  let currentVulnerabilitySettings = JSON.parse(JSON.stringify(defaultVulnerabilitySettings));
+  
+  // 更新默认设置以包含漏洞检测设置
+  defaultSettings.vulnerabilityDetection = defaultVulnerabilitySettings;
+  currentSettings.vulnerabilityDetection = currentVulnerabilitySettings;
+  
+  // 加载漏洞检测设置
+  function loadVulnerabilitySettings() {
+    try {
+      // 从chrome.storage加载设置
+      chrome.storage.local.get('vulnerabilitySettings', (result) => {
+        if (result.vulnerabilitySettings) {
+          currentVulnerabilitySettings = result.vulnerabilitySettings;
+          
+          // 更新UI
+          updateVulnerabilitySettingsUI();
+        } else {
+          // 如果没有保存的设置，使用默认设置
+          currentVulnerabilitySettings = JSON.parse(JSON.stringify(defaultVulnerabilitySettings));
+          saveVulnerabilitySettings();
+        }
+      });
+    } catch (error) {
+      console.error('加载漏洞检测设置时出错:', error);
+      
+      // 出错时使用默认设置
+      currentVulnerabilitySettings = JSON.parse(JSON.stringify(defaultVulnerabilitySettings));
+      updateVulnerabilitySettingsUI();
+    }
+  }
+  
+  // 保存漏洞检测设置
+  function saveVulnerabilitySettings() {
+    try {
+      chrome.storage.local.set({ 'vulnerabilitySettings': currentVulnerabilitySettings }, () => {
+        if (chrome.runtime.lastError) {
+          console.error('保存漏洞检测设置时出错:', chrome.runtime.lastError);
+        } else {
+          console.log('漏洞检测设置已保存');
+          
+          // 更新全局设置
+          currentSettings.vulnerabilityDetection = currentVulnerabilitySettings;
+          
+          // 通知后台脚本设置已更新
+          chrome.runtime.sendMessage({
+            action: 'updateVulnerabilitySettings',
+            settings: currentVulnerabilitySettings
+          });
+        }
+      });
+    } catch (error) {
+      console.error('保存漏洞检测设置过程中出错:', error);
+    }
+  }
+  
+  // 更新漏洞检测设置UI
+  function updateVulnerabilitySettingsUI() {
+    // 更新检测模式
+    detectionModeSelect.value = currentVulnerabilitySettings.detectionMode;
+    
+    // 更新检测深度
+    detectionDepthSlider.value = currentVulnerabilitySettings.detectionDepth;
+    
+    // 更新漏洞类型复选框
+    detectXssCheckbox.checked = currentVulnerabilitySettings.vulnerabilityTypes.xss;
+    detectSqliCheckbox.checked = currentVulnerabilitySettings.vulnerabilityTypes.sqli;
+    detectCsrfCheckbox.checked = currentVulnerabilitySettings.vulnerabilityTypes.csrf;
+    detectSsrfCheckbox.checked = currentVulnerabilitySettings.vulnerabilityTypes.ssrf;
+    detectInfoLeakageCheckbox.checked = currentVulnerabilitySettings.vulnerabilityTypes.infoLeakage;
+    detectHeadersCheckbox.checked = currentVulnerabilitySettings.vulnerabilityTypes.headers;
+  }
+  
+  // 重置漏洞检测设置为默认值
+  function resetVulnerabilitySettings() {
+    currentVulnerabilitySettings = JSON.parse(JSON.stringify(defaultVulnerabilitySettings));
+    updateVulnerabilitySettingsUI();
+    saveVulnerabilitySettings();
+  }
+  
+  // 从UI更新漏洞检测设置
+  function updateVulnerabilitySettingsFromUI() {
+    currentVulnerabilitySettings.detectionMode = detectionModeSelect.value;
+    currentVulnerabilitySettings.detectionDepth = parseInt(detectionDepthSlider.value);
+    
+    currentVulnerabilitySettings.vulnerabilityTypes = {
+      xss: detectXssCheckbox.checked,
+      sqli: detectSqliCheckbox.checked,
+      csrf: detectCsrfCheckbox.checked,
+      ssrf: detectSsrfCheckbox.checked,
+      infoLeakage: detectInfoLeakageCheckbox.checked,
+      headers: detectHeadersCheckbox.checked
+    };
+    
+    saveVulnerabilitySettings();
+  }
+  
+  // 初始化漏洞检测设置
+  loadVulnerabilitySettings();
+  
+  // 添加事件监听器
+  safeAddEventListener(detectionModeSelect, 'change', updateVulnerabilitySettingsFromUI);
+  safeAddEventListener(detectionDepthSlider, 'change', updateVulnerabilitySettingsFromUI);
+  safeAddEventListener(detectXssCheckbox, 'change', updateVulnerabilitySettingsFromUI);
+  safeAddEventListener(detectSqliCheckbox, 'change', updateVulnerabilitySettingsFromUI);
+  safeAddEventListener(detectCsrfCheckbox, 'change', updateVulnerabilitySettingsFromUI);
+  safeAddEventListener(detectSsrfCheckbox, 'change', updateVulnerabilitySettingsFromUI);
+  safeAddEventListener(detectInfoLeakageCheckbox, 'change', updateVulnerabilitySettingsFromUI);
+  safeAddEventListener(detectHeadersCheckbox, 'change', updateVulnerabilitySettingsFromUI);
+  safeAddEventListener(resetVulnerabilitySettingsBtn, 'click', resetVulnerabilitySettings);
+  
+  // 开始扫描前设置漏洞检测选项
+  function prepareVulnerabilityDetection() {
+    try {
+      // 发送漏洞检测设置到后台脚本
+      chrome.runtime.sendMessage({
+        action: 'prepareVulnerabilityDetection',
+        settings: currentVulnerabilitySettings
+      }, (response) => {
+        if (chrome.runtime.lastError) {
+          console.error('发送漏洞检测设置时出错:', chrome.runtime.lastError);
+        } else if (response && response.success) {
+          console.log('漏洞检测设置已应用');
+        }
+      });
+    } catch (error) {
+      console.error('准备漏洞检测设置时出错:', error);
+    }
   }
 }); 

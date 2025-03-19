@@ -1,4 +1,39 @@
 document.addEventListener('DOMContentLoaded', () => {
+  // 颜色常量定义 - 移到文件顶部，确保在任何函数调用前就被定义
+  const CHART_COLORS = {
+    // 漏洞类型颜色
+    vulnerabilityTypes: {
+      'XSS': '#FF6384',
+      'SQL注入': '#36A2EB',
+      'CSRF': '#FFCE56',
+      '敏感信息泄露': '#4BC0C0',
+      '不安全的HTTP头部': '#9966FF',
+      '不安全的CORS配置': '#8BC34A',
+      '开放重定向': '#FF9800',
+      'SSRF漏洞': '#E91E63',
+      '其他': '#FF9F40',
+      'default': '#C9C9C9'
+    },
+    // 严重程度颜色
+    severityLevels: {
+      'Critical': '#9c27b0',
+      'High': '#e74c3c',
+      'Medium': '#f39c12',
+      'Low': '#3498db',
+      'Info': '#7f8c8d',
+      'default': '#C9C9C9'
+    },
+    // 图表配置
+    chartConfig: {
+      fontFamily: "'Microsoft YaHei', Arial, sans-serif",
+      titleFontSize: 18,
+      labelFontSize: 12,
+      valueFontSize: 14,
+      borderWidth: 2,
+      animationDuration: 1000
+    }
+  };
+
   // 安全地获取DOM元素
   function safeGetElement(id) {
     const element = document.getElementById(id);
@@ -49,21 +84,20 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // DOM元素
-  const vulnerabilitiesContainer = safeGetElement('vulnerabilities-container');
-  const filterType = safeGetElement('filter-type');
-  const filterDomain = safeGetElement('filter-domain');
+  const vulnerabilitiesContainer = safeGetElement('vulnerabilities-list');
+  const filterType = safeGetElement('type-filter');
+  const filterDomain = safeGetElement('domain-filter');
   const exportButton = safeGetElement('export-report');
   const clearButton = safeGetElement('clear-data');
   const prevButton = safeGetElement('prev-page');
   const nextButton = safeGetElement('next-page');
-  const currentPageSpan = safeGetElement('current-page');
+  const currentPageSpan = safeGetElement('current-page-num');
   
   // 统计元素
   const totalSitesElem = safeGetElement('total-sites');
   const totalVulnerabilitiesElem = safeGetElement('total-vulnerabilities');
-  const xssCountElem = safeGetElement('xss-count');
-  const sqliCountElem = safeGetElement('sqli-count');
-  const csrfCountElem = safeGetElement('csrf-count');
+  const criticalCountElem = safeGetElement('critical-vulnerabilities');
+  const highCountElem = safeGetElement('high-vulnerabilities');
   
   // 状态变量
   let allVulnerabilities = [];
@@ -100,17 +134,69 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // 加载漏洞数据
   function loadVulnerabilities() {
-    chrome.storage.local.get('vulnerabilities', (result) => {
-      if (result.vulnerabilities && result.vulnerabilities.length > 0) {
-        allVulnerabilities = result.vulnerabilities;
-        extractDomains();
-        updateFilters();
-        filterVulnerabilities();
-        updateStatistics();
-      } else {
-        showNoResults();
-      }
-    });
+    try {
+      chrome.storage.local.get('vulnerabilities', (result) => {
+        try {
+          allVulnerabilities = [];
+          
+          if (!result || !result.vulnerabilities) {
+            showNoResults();
+            return;
+          }
+          
+          // 确保统计信息对象存在
+          if (result.vulnerabilities.statistics === undefined) {
+            result.vulnerabilities.statistics = { domains: new Set() };
+          } else if (result.vulnerabilities.statistics.domains === undefined) {
+            result.vulnerabilities.statistics.domains = new Set();
+          }
+          
+          // 处理新格式漏洞数据
+          if (result.vulnerabilities.byDomain) {
+            // 从byDomain对象中提取所有漏洞
+            Object.values(result.vulnerabilities.byDomain).forEach(vulns => {
+              if (Array.isArray(vulns)) {
+                allVulnerabilities = allVulnerabilities.concat(vulns);
+              }
+            });
+          } 
+          // 处理旧格式（数组格式）
+          else if (Array.isArray(result.vulnerabilities)) {
+            allVulnerabilities = result.vulnerabilities;
+          }
+          
+          // 检查是否有漏洞
+          if (allVulnerabilities.length === 0) {
+            showNoResults();
+            return;
+          }
+          
+          // 处理提取的漏洞
+          extractDomains();
+          updateFilters();
+          filterVulnerabilities();
+          updateStatistics();
+          
+          // 绘制图表
+          if (typeof drawVulnerabilityChart === 'function') {
+            drawVulnerabilityChart();
+          }
+          
+          if (typeof drawDomainDistributionChart === 'function') {
+            drawDomainDistributionChart();
+          }
+          
+        } catch (error) {
+          console.error('处理漏洞数据时出错:', error);
+          showErrorMessage('加载漏洞数据时出错: ' + (error.message || '未知错误'));
+          showNoResults();
+        }
+      });
+    } catch (error) {
+      console.error('调用chrome.storage.local.get时出错:', error);
+      showErrorMessage('加载漏洞数据时出错: ' + (error.message || '未知错误'));
+      showNoResults();
+    }
   }
   
   // 提取所有域名
@@ -282,35 +368,15 @@ document.addEventListener('DOMContentLoaded', () => {
     // 总漏洞数
     totalVulnerabilitiesElem.textContent = allVulnerabilities.length;
     
-    // 各类型漏洞数
-    const xssCount = allVulnerabilities.filter(v => v.type === 'XSS').length;
-    const sqliCount = allVulnerabilities.filter(v => v.type === 'SQL Injection').length;
-    const csrfCount = allVulnerabilities.filter(v => v.type === 'CSRF').length;
-    
-    xssCountElem.textContent = xssCount;
-    sqliCountElem.textContent = sqliCount;
-    csrfCountElem.textContent = csrfCount;
-    
     // 各严重程度漏洞数
     const criticalCount = allVulnerabilities.filter(v => 
       v.details && v.details.severity && v.details.severity.toLowerCase() === 'critical').length;
     const highCount = allVulnerabilities.filter(v => 
       v.details && v.details.severity && v.details.severity.toLowerCase() === 'high').length;
-    const mediumCount = allVulnerabilities.filter(v => 
-      v.details && v.details.severity && v.details.severity.toLowerCase() === 'medium').length;
-    const lowCount = allVulnerabilities.filter(v => 
-      v.details && v.details.severity && v.details.severity.toLowerCase() === 'low').length;
     
     // 更新仪表盘上的严重程度计数
-    const criticalCountElem = safeGetElement('critical-count');
-    const highCountElem = safeGetElement('high-count');
-    const mediumCountElem = safeGetElement('medium-count');
-    const lowCountElem = safeGetElement('low-count');
-    
     criticalCountElem.textContent = criticalCount;
     highCountElem.textContent = highCount;
-    mediumCountElem.textContent = mediumCount;
-    lowCountElem.textContent = lowCount;
     
     // 生成图表
     drawVulnerabilityChart();
@@ -321,148 +387,192 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // 绘制漏洞类型统计图表
   function drawVulnerabilityChart() {
-    // 获取所有漏洞类型及其数量
-    const vulnTypes = {};
-    allVulnerabilities.forEach(vuln => {
-      if (!vulnTypes[vuln.type]) {
-        vulnTypes[vuln.type] = 0;
-      }
-      vulnTypes[vuln.type]++;
+    // 获取漏洞类型分布的数据
+    const vulnerabilityTypes = {};
+    let totalVulnerabilities = 0;
+
+    // 计算各类型漏洞数量
+    allVulnerabilities.forEach(vulnerability => {
+      const type = vulnerability.type || 'Other';
+      vulnerabilityTypes[type] = (vulnerabilityTypes[type] || 0) + 1;
+      totalVulnerabilities++;
     });
-    
+
     // 获取图表容器
     const chartContainer = safeGetElement('vulnerability-type-chart');
     if (!chartContainer) return;
     
-    // 清空容器
+    // 清空容器，保留工具栏
+    const toolbarElement = chartContainer.querySelector('.chart-toolbar');
     chartContainer.innerHTML = '';
+    if (toolbarElement) {
+      chartContainer.appendChild(toolbarElement);
+    }
     
-    // 如果没有漏洞，显示无数据
-    if (Object.keys(vulnTypes).length === 0) {
-      chartContainer.innerHTML = '<div class="no-data">暂无数据</div>';
+    // 如果没有漏洞数据，显示提示信息
+    if (totalVulnerabilities === 0) {
+      const noDataDiv = document.createElement('div');
+      noDataDiv.className = 'no-data';
+      noDataDiv.textContent = '暂无漏洞数据';
+      chartContainer.appendChild(noDataDiv);
       return;
     }
     
     // 创建Canvas元素
     const canvas = document.createElement('canvas');
     canvas.width = chartContainer.clientWidth;
-    canvas.height = chartContainer.clientHeight;
+    canvas.height = 250;
     chartContainer.appendChild(canvas);
     
     // 获取绘图上下文
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     
-    // 定义颜色
-    const colors = [
-      '#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6',
-      '#1abc9c', '#d35400', '#34495e', '#7f8c8d', '#c0392b'
-    ];
+    // 准备饼图数据
+    const data = [];
+    const labels = [];
+    const percentages = [];
     
-    // 定义饼图参数
-    const centerX = canvas.width / 2;
-    const centerY = canvas.height / 2;
-    const radius = Math.min(centerX, centerY) * 0.8;
-    
-    // 计算总数
-    const total = Object.values(vulnTypes).reduce((sum, count) => sum + count, 0);
-    
-    // 绘制饼图
-    let startAngle = 0;
-    let colorIndex = 0;
-    
-    // 创建图例容器
-    const legend = document.createElement('div');
-    legend.className = 'chart-legend';
-    chartContainer.appendChild(legend);
-    
-    for (const [type, count] of Object.entries(vulnTypes)) {
-      const angle = (count / total) * Math.PI * 2;
+    for (const type in vulnerabilityTypes) {
+      const count = vulnerabilityTypes[type];
+      const percentage = (count / totalVulnerabilities) * 100;
       
-      // 绘制扇形
-      ctx.beginPath();
-      ctx.moveTo(centerX, centerY);
-      ctx.arc(centerX, centerY, radius, startAngle, startAngle + angle);
-      ctx.closePath();
-      
-      // 填充颜色
-      ctx.fillStyle = colors[colorIndex % colors.length];
-      ctx.fill();
-      
-      // 绘制边框
-      ctx.strokeStyle = 'white';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-      
-      // 添加图例项
-      const legendItem = document.createElement('div');
-      legendItem.className = 'legend-item';
-      legendItem.innerHTML = `
-        <span class="color-box" style="background-color: ${colors[colorIndex % colors.length]}"></span>
-        <span class="type">${type}</span>
-        <span class="count">${count} (${Math.round((count / total) * 100)}%)</span>
-      `;
-      legend.appendChild(legendItem);
-      
-      // 更新角度和颜色索引
-      startAngle += angle;
-      colorIndex++;
+      data.push(count);
+      labels.push(type);
+      percentages.push(percentage.toFixed(1));
     }
     
-    // 添加CSS样式
-    const style = document.createElement('style');
-    style.textContent = `
-      .chart-legend {
-        margin-top: 15px;
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
+    // 绘制饼图（带动画）
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2 - 10; // 向上偏移一点，为图例留出空间
+    const radius = Math.min(centerX, centerY) * 0.8;
+    
+    // 创建图例容器
+    const legendDiv = document.createElement('div');
+    legendDiv.style.display = 'flex';
+    legendDiv.style.flexWrap = 'wrap';
+    legendDiv.style.justifyContent = 'center';
+    legendDiv.style.gap = '10px';
+    legendDiv.style.marginTop = '15px';
+    legendDiv.style.fontSize = CHART_COLORS.chartConfig.labelFontSize + 'px';
+    
+    // 创建图例项
+    data.forEach((value, index) => {
+      // 创建图例项
+      const legendItem = document.createElement('div');
+      legendItem.style.display = 'flex';
+      legendItem.style.alignItems = 'center';
+      legendItem.style.padding = '3px 8px';
+      legendItem.style.backgroundColor = 'rgba(255, 255, 255, 0.7)';
+      legendItem.style.borderRadius = '4px';
+      legendItem.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
+      legendItem.style.opacity = '0';
+      legendItem.style.transition = 'opacity 0.5s ease';
+      
+      // 创建颜色方块
+      const colorBox = document.createElement('span');
+      colorBox.style.display = 'inline-block';
+      colorBox.style.width = '12px';
+      colorBox.style.height = '12px';
+      colorBox.style.backgroundColor = CHART_COLORS.vulnerabilityTypes[labels[index]] || CHART_COLORS.vulnerabilityTypes['default'];
+      colorBox.style.marginRight = '5px';
+      colorBox.style.borderRadius = '2px';
+      
+      // 创建标签文本
+      const labelText = document.createElement('span');
+      labelText.textContent = `${labels[index]}: ${value} (${percentages[index]}%)`;
+      
+      // 组装图例项
+      legendItem.appendChild(colorBox);
+      legendItem.appendChild(labelText);
+      legendDiv.appendChild(legendItem);
+      
+      // 延迟显示图例项（按顺序淡入）
+      setTimeout(() => {
+        legendItem.style.opacity = '1';
+      }, 500 + index * 100);
+    });
+    
+    // 添加图例到容器
+    chartContainer.appendChild(legendDiv);
+    
+    // 绘制动画
+    let animationProgress = 0;
+    const animationDuration = 1000; // 动画持续时间（毫秒）
+    let lastFrameTime = 0;
+    
+    function animate(currentTime) {
+      if (!lastFrameTime) lastFrameTime = currentTime;
+      const deltaTime = currentTime - lastFrameTime;
+      lastFrameTime = currentTime;
+      
+      // 更新动画进度
+      animationProgress += deltaTime / animationDuration;
+      if (animationProgress > 1) animationProgress = 1;
+      
+      // 清除画布
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      // 绘制饼图
+      let startAngle = 0;
+      
+      data.forEach((value, index) => {
+        const sliceAngle = (value / totalVulnerabilities) * 2 * Math.PI;
+        // 计算当前动画帧的终止角度
+        const endAngle = startAngle + sliceAngle * animationProgress;
+        
+        // 绘制扇区
+        ctx.beginPath();
+        ctx.moveTo(centerX, centerY);
+        ctx.arc(centerX, centerY, radius, startAngle, endAngle);
+        ctx.closePath();
+        
+        // 设置扇区颜色和描边
+        ctx.fillStyle = CHART_COLORS.vulnerabilityTypes[labels[index]] || CHART_COLORS.vulnerabilityTypes['default'];
+        ctx.strokeStyle = 'white';
+        ctx.lineWidth = 2;
+        ctx.fill();
+        ctx.stroke();
+        
+        // 更新下一个扇区的起始角度
+        startAngle = startAngle + sliceAngle;
+      });
+      
+      // 如果动画未完成，继续请求下一帧
+      if (animationProgress < 1) {
+        requestAnimationFrame(animate);
       }
-      .legend-item {
-        display: flex;
-        align-items: center;
-        margin-right: 15px;
-        margin-bottom: 5px;
-      }
-      .color-box {
-        width: 12px;
-        height: 12px;
-        margin-right: 5px;
-        border-radius: 2px;
-      }
-      .type {
-        margin-right: 5px;
-        font-weight: bold;
-      }
-      .count {
-        color: #666;
-      }
-      .no-data {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        height: 100%;
-        color: #999;
-        font-style: italic;
-      }
-    `;
-    document.head.appendChild(style);
+    }
+    
+    // 启动动画
+    requestAnimationFrame(animate);
   }
   
   // 绘制漏洞严重程度分布图表
   function drawSeverityChart() {
-    // 获取各严重程度漏洞数量
+    // 获取漏洞严重程度分布的数据
     const severityCounts = {
-      '严重': allVulnerabilities.filter(v => 
-        v.details && v.details.severity && v.details.severity.toLowerCase() === 'critical').length,
-      '高危': allVulnerabilities.filter(v => 
-        v.details && v.details.severity && v.details.severity.toLowerCase() === 'high').length,
-      '中危': allVulnerabilities.filter(v => 
-        v.details && v.details.severity && v.details.severity.toLowerCase() === 'medium').length,
-      '低危': allVulnerabilities.filter(v => 
-        v.details && v.details.severity && v.details.severity.toLowerCase() === 'low').length
+      'critical': 0,
+      'high': 0,
+      'medium': 0,
+      'low': 0,
+      'info': 0
     };
     
+    let totalVulnerabilities = 0;
+
+    // 计算各严重程度漏洞数量
+    allVulnerabilities.forEach(vulnerability => {
+      const severity = vulnerability.severity?.toLowerCase() || 'info';
+      if (severityCounts.hasOwnProperty(severity)) {
+        severityCounts[severity]++;
+        totalVulnerabilities++;
+      } else {
+        severityCounts['info']++;
+        totalVulnerabilities++;
+      }
+    });
+
     // 获取图表容器
     const chartContainer = safeGetElement('severity-chart');
     if (!chartContainer) return;
@@ -470,84 +580,132 @@ document.addEventListener('DOMContentLoaded', () => {
     // 清空容器
     chartContainer.innerHTML = '';
     
-    // 如果没有漏洞，显示无数据
-    if (Object.values(severityCounts).reduce((sum, count) => sum + count, 0) === 0) {
-      chartContainer.innerHTML = '<div class="no-data">暂无数据</div>';
+    // 如果没有漏洞数据，显示提示信息
+    if (totalVulnerabilities === 0) {
+      chartContainer.innerHTML = '<div class="no-data">暂无漏洞数据</div>';
       return;
     }
     
     // 创建Canvas元素
     const canvas = document.createElement('canvas');
     canvas.width = chartContainer.clientWidth;
-    canvas.height = chartContainer.clientHeight;
+    canvas.height = 250;
     chartContainer.appendChild(canvas);
     
     // 获取绘图上下文
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     
-    // 定义颜色
-    const colors = {
-      '严重': '#9c27b0',
-      '高危': '#e74c3c',
-      '中危': '#f39c12',
-      '低危': '#3498db'
+    // 准备饼图数据
+    const data = [];
+    const labels = [];
+    const percentages = [];
+    
+    const severityNames = {
+      'critical': '严重',
+      'high': '高危',
+      'medium': '中危',
+      'low': '低危',
+      'info': '信息'
     };
     
-    // 定义饼图参数
-    const centerX = canvas.width / 2;
-    const centerY = canvas.height / 2;
-    const radius = Math.min(centerX, centerY) * 0.8;
-    
-    // 计算总数
-    const total = Object.values(severityCounts).reduce((sum, count) => sum + count, 0);
+    for (const severity in severityCounts) {
+      const count = severityCounts[severity];
+      if (count === 0) continue; // 跳过没有数据的严重程度
+      
+      const percentage = (count / totalVulnerabilities) * 100;
+      
+      data.push(count);
+      labels.push(severityNames[severity] || severity);
+      percentages.push(percentage.toFixed(1));
+    }
     
     // 绘制饼图
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2 - 10; // 向上偏移一点，为图例留出空间
+    const radius = Math.min(centerX, centerY) * 0.8;
+    
     let startAngle = 0;
     
     // 创建图例容器
-    const legend = document.createElement('div');
-    legend.className = 'chart-legend';
-    chartContainer.appendChild(legend);
+    const legendDiv = document.createElement('div');
+    legendDiv.style.display = 'flex';
+    legendDiv.style.flexWrap = 'wrap';
+    legendDiv.style.justifyContent = 'center';
+    legendDiv.style.gap = '10px';
+    legendDiv.style.marginTop = '15px';
+    legendDiv.style.fontSize = CHART_COLORS.chartConfig.labelFontSize + 'px';
     
-    for (const [severity, count] of Object.entries(severityCounts)) {
-      // 跳过计数为0的严重程度
-      if (count === 0) continue;
+    // 绘制饼图扇区和创建图例
+    data.forEach((value, index) => {
+      const sliceAngle = (value / totalVulnerabilities) * 2 * Math.PI;
+      const endAngle = startAngle + sliceAngle;
       
-      const angle = (count / total) * Math.PI * 2;
-      
-      // 绘制扇形
+      // 绘制扇区
       ctx.beginPath();
       ctx.moveTo(centerX, centerY);
-      ctx.arc(centerX, centerY, radius, startAngle, startAngle + angle);
+      ctx.arc(centerX, centerY, radius, startAngle, endAngle);
       ctx.closePath();
       
-      // 填充颜色
-      ctx.fillStyle = colors[severity];
-      ctx.fill();
-      
-      // 绘制边框
+      // 设置扇区颜色和描边
+      ctx.fillStyle = CHART_COLORS.severityLevels[labels[index]] || CHART_COLORS.vulnerabilityTypes['default'];
       ctx.strokeStyle = 'white';
       ctx.lineWidth = 2;
+      ctx.fill();
       ctx.stroke();
       
-      // 添加图例项
+      // 创建图例项
       const legendItem = document.createElement('div');
-      legendItem.className = 'legend-item';
-      legendItem.innerHTML = `
-        <span class="color-box" style="background-color: ${colors[severity]}"></span>
-        <span class="type">${severity}</span>
-        <span class="count">${count} (${Math.round((count / total) * 100)}%)</span>
-      `;
-      legend.appendChild(legendItem);
+      legendItem.style.display = 'flex';
+      legendItem.style.alignItems = 'center';
+      legendItem.style.padding = '3px 8px';
+      legendItem.style.backgroundColor = 'rgba(255, 255, 255, 0.7)';
+      legendItem.style.borderRadius = '4px';
+      legendItem.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
       
-      // 更新角度
-      startAngle += angle;
-    }
+      // 创建颜色方块
+      const colorBox = document.createElement('span');
+      colorBox.style.display = 'inline-block';
+      colorBox.style.width = '12px';
+      colorBox.style.height = '12px';
+      colorBox.style.backgroundColor = CHART_COLORS.severityLevels[labels[index]] || CHART_COLORS.vulnerabilityTypes['default'];
+      colorBox.style.marginRight = '5px';
+      colorBox.style.borderRadius = '2px';
+      
+      // 创建标签文本
+      const labelText = document.createElement('span');
+      // 将严重程度首字母大写
+      const severityLabel = labels[index].charAt(0).toUpperCase() + labels[index].slice(1);
+      labelText.textContent = `${severityLabel}: ${value} (${percentages[index]}%)`;
+      
+      // 组装图例项
+      legendItem.appendChild(colorBox);
+      legendItem.appendChild(labelText);
+      legendDiv.appendChild(legendItem);
+      
+      // 更新起始角度
+      startAngle = endAngle;
+    });
+    
+    // 添加图例到容器
+    chartContainer.appendChild(legendDiv);
   }
   
   // 绘制站点漏洞分布图表
   function drawDomainDistributionChart() {
+    // 获取域名分布数据
+    const domainCounts = {};
+    allVulnerabilities.forEach(vulnerability => {
+      try {
+        const hostname = new URL(vulnerability.details.location).hostname;
+        domainCounts[hostname] = (domainCounts[hostname] || 0) + 1;
+      } catch (e) {
+        // 处理无效URL的情况
+        const fallbackDomain = vulnerability.details.location || '未知域名';
+        domainCounts[fallbackDomain] = (domainCounts[fallbackDomain] || 0) + 1;
+      }
+    });
+    
     // 获取图表容器
     const chartContainer = safeGetElement('domain-distribution-chart');
     if (!chartContainer) return;
@@ -555,92 +713,175 @@ document.addEventListener('DOMContentLoaded', () => {
     // 清空容器
     chartContainer.innerHTML = '';
     
-    // 如果没有漏洞，显示无数据
-    if (allVulnerabilities.length === 0 || domains.size === 0) {
-      chartContainer.innerHTML = '<div class="no-data">暂无数据</div>';
+    // 检查是否有数据
+    if (Object.keys(domainCounts).length === 0) {
+      chartContainer.innerHTML = '<div class="no-data">暂无域名数据</div>';
       return;
     }
     
-    // 按域名分组漏洞
-    const domainVulnCounts = {};
-    allVulnerabilities.forEach(vuln => {
-      try {
-        const url = new URL(vuln.details.location);
-        const domain = url.hostname;
-        
-        if (!domainVulnCounts[domain]) {
-          domainVulnCounts[domain] = 0;
-        }
-        
-        domainVulnCounts[domain]++;
-      } catch (e) {
-        // 忽略无效URL
-      }
-    });
+    // 按漏洞数量排序并限制显示数量
+    const maxDomainsToShow = 8;
+    const sortedDomains = Object.entries(domainCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, maxDomainsToShow);
     
     // 创建Canvas元素
     const canvas = document.createElement('canvas');
     canvas.width = chartContainer.clientWidth;
-    canvas.height = chartContainer.clientHeight;
+    canvas.height = 250;
     chartContainer.appendChild(canvas);
     
     // 获取绘图上下文
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     
-    // 定义颜色
-    const colors = [
-      '#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6',
-      '#1abc9c', '#d35400', '#34495e', '#7f8c8d', '#c0392b'
-    ];
+    // 设置图表尺寸和边距
+    const padding = { left: 170, right: 40, top: 30, bottom: 40 };
+    const chartWidth = canvas.width - padding.left - padding.right;
+    const chartHeight = canvas.height - padding.top - padding.bottom;
     
-    // 排序域名（按漏洞数量降序）
-    const sortedDomains = Object.keys(domainVulnCounts).sort((a, b) => 
-      domainVulnCounts[b] - domainVulnCounts[a]
-    );
+    // 计算条形图参数
+    const barHeight = Math.min(25, chartHeight / sortedDomains.length - 5);
+    const maxValue = Math.max(...sortedDomains.map(d => d[1]));
     
-    // 限制最多显示前8个域名
-    const displayDomains = sortedDomains.slice(0, 8);
+    // 绘制X轴
+    ctx.beginPath();
+    ctx.strokeStyle = '#ccc';
+    ctx.lineWidth = 1;
+    ctx.moveTo(padding.left, canvas.height - padding.bottom);
+    ctx.lineTo(canvas.width - padding.right, canvas.height - padding.bottom);
+    ctx.stroke();
     
-    // 计算图表尺寸
-    const barHeight = 25;
-    const barSpacing = 10;
-    const maxBarWidth = canvas.width - 150; // 留出右侧空间显示计数
-    const maxCount = Math.max(...Object.values(domainVulnCounts));
+    // 绘制X轴刻度和网格线
+    const xSteps = 5;
+    ctx.beginPath();
+    ctx.strokeStyle = '#eee';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#666';
+    ctx.font = `${CHART_COLORS.chartConfig.labelFontSize}px ${CHART_COLORS.chartConfig.fontFamily}`;
     
-    // 绘制柱状图
-    displayDomains.forEach((domain, index) => {
-      const count = domainVulnCounts[domain];
-      const barWidth = (count / maxCount) * maxBarWidth;
-      const y = index * (barHeight + barSpacing) + 20;
+    for (let i = 0; i <= xSteps; i++) {
+      const value = Math.round((i / xSteps) * maxValue);
+      const x = padding.left + (i / xSteps) * chartWidth;
       
-      // 绘制域名
+      // 绘制网格线
+      ctx.moveTo(x, padding.top);
+      ctx.lineTo(x, canvas.height - padding.bottom);
+      
+      // 绘制X轴刻度
+      ctx.fillText(value.toString(), x, canvas.height - padding.bottom + 15);
+    }
+    ctx.stroke();
+    
+    // 绘制条形图和域名标签
+    sortedDomains.forEach((domain, index) => {
+      const [domainName, count] = domain;
+      const barWidth = (count / maxValue) * chartWidth;
+      const y = padding.top + index * (barHeight + 5);
+      
+      // 截断过长的域名
+      let displayName = domainName;
+      const maxNameLength = 20;
+      if (displayName.length > maxNameLength) {
+        displayName = displayName.substring(0, maxNameLength) + '...';
+      }
+      
+      // 绘制域名标签
       ctx.fillStyle = '#333';
-      ctx.font = '12px Arial';
-      ctx.textAlign = 'left';
-      ctx.fillText(domain.length > 20 ? domain.substring(0, 17) + '...' : domain, 0, y);
+      ctx.textAlign = 'right';
+      ctx.font = `${CHART_COLORS.chartConfig.labelFontSize}px ${CHART_COLORS.chartConfig.fontFamily}`;
+      ctx.fillText(displayName, padding.left - 10, y + barHeight / 2 + 4);
       
-      // 绘制柱状
-      ctx.fillStyle = colors[index % colors.length];
-      ctx.fillRect(0, y + 5, barWidth, barHeight);
+      // 绘制条形
+      ctx.fillStyle = getBarColor(index);
+      roundRect(ctx, padding.left, y, barWidth, barHeight, 4, true);
       
-      // 绘制计数
-      ctx.fillStyle = '#333';
-      ctx.textAlign = 'left';
-      ctx.fillText(count.toString(), barWidth + 5, y + barHeight/2 + 5);
+      // 绘制数值标签
+      ctx.fillStyle = '#fff';
+      ctx.textAlign = 'right';
+      ctx.font = `bold ${CHART_COLORS.chartConfig.valueFontSize}px ${CHART_COLORS.chartConfig.fontFamily}`;
+      if (barWidth > 40) { // 如果条形足够宽，在条形内显示数值
+        ctx.fillText(count.toString(), padding.left + barWidth - 10, y + barHeight / 2 + 4);
+      } else { // 否则在条形外显示数值
+        ctx.fillStyle = '#333';
+        ctx.textAlign = 'left';
+        ctx.fillText(count.toString(), padding.left + barWidth + 5, y + barHeight / 2 + 4);
+      }
     });
     
-    // 如果域名太多，添加提示
-    if (sortedDomains.length > displayDomains.length) {
-      ctx.fillStyle = '#666';
-      ctx.font = '12px Arial';
-      ctx.textAlign = 'center';
-      ctx.fillText(`还有 ${sortedDomains.length - displayDomains.length} 个站点未显示`, canvas.width/2, canvas.height - 10);
+    // 显示剩余域名数量提示
+    const remainingDomains = Object.keys(domainCounts).length - maxDomainsToShow;
+    if (remainingDomains > 0) {
+      ctx.fillStyle = '#7f8c8d';
+      ctx.textAlign = 'right';
+      ctx.font = `italic ${CHART_COLORS.chartConfig.labelFontSize}px ${CHART_COLORS.chartConfig.fontFamily}`;
+      ctx.fillText(`还有 ${remainingDomains} 个站点未显示`, canvas.width - padding.right, canvas.height - 10);
+    }
+    
+    // 辅助函数：为条形生成颜色
+    function getBarColor(index) {
+      const colors = [
+        '#4285f4', '#ea4335', '#fbbc05', '#34a853', 
+        '#5e35b1', '#00acc1', '#43a047', '#fb8c00'
+      ];
+      return colors[index % colors.length];
+    }
+    
+    // 辅助函数：绘制圆角矩形
+    function roundRect(ctx, x, y, width, height, radius, fill) {
+      if (typeof radius === 'number') {
+        radius = {tl: radius, tr: radius, br: radius, bl: radius};
+      } else {
+        radius = {...{tl: 0, tr: 0, br: 0, bl: 0}, ...radius};
+      }
+      ctx.beginPath();
+      ctx.moveTo(x + radius.tl, y);
+      ctx.lineTo(x + width - radius.tr, y);
+      ctx.quadraticCurveTo(x + width, y, x + width, y + radius.tr);
+      ctx.lineTo(x + width, y + height - radius.br);
+      ctx.quadraticCurveTo(x + width, y + height, x + width - radius.br, y + height);
+      ctx.lineTo(x + radius.bl, y + height);
+      ctx.quadraticCurveTo(x, y + height, x, y + height - radius.bl);
+      ctx.lineTo(x, y + radius.tl);
+      ctx.quadraticCurveTo(x, y, x + radius.tl, y);
+      ctx.closePath();
+      if (fill) {
+        ctx.fill();
+      } else {
+        ctx.stroke();
+      }
     }
   }
   
   // 绘制最近检测活动图表
   function drawRecentActivityChart() {
+    // 获取最近7天的漏洞检测数据
+    const today = new Date();
+    const dates = [];
+    const dateCounts = {};
+    
+    // 生成最近7天的日期
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date(today);
+      date.setDate(today.getDate() - i);
+      const dateString = `${date.getMonth() + 1}/${date.getDate()}`;
+      dates.push(dateString);
+      dateCounts[dateString] = 0;
+    }
+    
+    // 统计每天的漏洞数量
+    allVulnerabilities.forEach(vulnerability => {
+      if (vulnerability.timestamp) {
+        const vulnDate = new Date(vulnerability.timestamp);
+        // 只统计最近7天的数据
+        const diffDays = Math.floor((today - vulnDate) / (24 * 60 * 60 * 1000));
+        if (diffDays >= 0 && diffDays < 7) {
+          const dateString = `${vulnDate.getMonth() + 1}/${vulnDate.getDate()}`;
+          dateCounts[dateString] = (dateCounts[dateString] || 0) + 1;
+        }
+      }
+    });
+    
     // 获取图表容器
     const chartContainer = safeGetElement('recent-activity-chart');
     if (!chartContainer) return;
@@ -648,152 +889,125 @@ document.addEventListener('DOMContentLoaded', () => {
     // 清空容器
     chartContainer.innerHTML = '';
     
-    // 如果没有漏洞，显示无数据
-    if (allVulnerabilities.length === 0) {
-      chartContainer.innerHTML = '<div class="no-data">暂无数据</div>';
-      return;
-    }
-    
-    // 按日期对漏洞进行分组
-    const vulnsByDate = {};
-    
-    // 获取最近7天的日期
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    const dates = [];
-    for (let i = 6; i >= 0; i--) {
-      const date = new Date(today);
-      date.setDate(date.getDate() - i);
-      const dateStr = date.toISOString().split('T')[0];
-      dates.push(dateStr);
-      vulnsByDate[dateStr] = 0;
-    }
-    
-    // 统计每天的漏洞数量
-    allVulnerabilities.forEach(vuln => {
-      if (vuln.timestamp) {
-        const vulnDate = new Date(vuln.timestamp);
-        const dateStr = vulnDate.toISOString().split('T')[0];
-        
-        // 检查是否在最近7天内
-        if (vulnsByDate.hasOwnProperty(dateStr)) {
-          vulnsByDate[dateStr]++;
-        }
-      }
-    });
-    
     // 创建Canvas元素
     const canvas = document.createElement('canvas');
     canvas.width = chartContainer.clientWidth;
-    canvas.height = chartContainer.clientHeight;
+    canvas.height = 250;
     chartContainer.appendChild(canvas);
     
     // 获取绘图上下文
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     
-    // 图表尺寸
-    const chartWidth = canvas.width - 60;
-    const chartHeight = canvas.height - 60;
-    const leftPadding = 40;
-    const bottomPadding = 40;
+    // 准备图表数据
+    const data = dates.map(date => dateCounts[date] || 0);
+    const maxValue = Math.max(...data, 10); // 至少为10，避免图表过于扁平
     
-    // 获取最大值
-    const maxVulns = Math.max(...Object.values(vulnsByDate), 1);
+    // 设置图表尺寸和边距
+    const padding = 40;
+    const chartWidth = canvas.width - padding * 2;
+    const chartHeight = canvas.height - padding * 2;
     
-    // 设置刻度
-    const yStep = chartHeight / 5;
-    const xStep = chartWidth / (dates.length - 1);
-    
-    // 绘制Y轴
+    // 绘制坐标轴
     ctx.beginPath();
-    ctx.moveTo(leftPadding, 20);
-    ctx.lineTo(leftPadding, 20 + chartHeight);
-    ctx.strokeStyle = '#999';
+    ctx.strokeStyle = '#ccc';
+    ctx.lineWidth = 1;
+    
+    // X轴
+    ctx.moveTo(padding, canvas.height - padding);
+    ctx.lineTo(canvas.width - padding, canvas.height - padding);
+    
+    // Y轴
+    ctx.moveTo(padding, padding);
+    ctx.lineTo(padding, canvas.height - padding);
     ctx.stroke();
     
-    // 绘制Y轴刻度
-    for (let i = 0; i <= 5; i++) {
-      const y = 20 + chartHeight - i * yStep;
-      const value = Math.round(maxVulns * i / 5);
+    // 绘制网格线和Y轴刻度
+    const ySteps = 5;
+    ctx.beginPath();
+    ctx.strokeStyle = '#eee';
+    ctx.fillStyle = '#666';
+    ctx.textAlign = 'right';
+    ctx.font = `${CHART_COLORS.chartConfig.labelFontSize}px ${CHART_COLORS.chartConfig.fontFamily}`;
+    
+    for (let i = 0; i <= ySteps; i++) {
+      const y = canvas.height - padding - (i / ySteps) * chartHeight;
+      const value = Math.round((i / ySteps) * maxValue);
       
-      ctx.beginPath();
-      ctx.moveTo(leftPadding - 5, y);
-      ctx.lineTo(leftPadding, y);
-      ctx.strokeStyle = '#999';
-      ctx.stroke();
+      // 绘制网格线
+      ctx.moveTo(padding, y);
+      ctx.lineTo(canvas.width - padding, y);
       
-      ctx.fillStyle = '#666';
-      ctx.font = '10px Arial';
-      ctx.textAlign = 'right';
-      ctx.fillText(value.toString(), leftPadding - 8, y + 3);
+      // 绘制Y轴刻度
+      ctx.fillText(value.toString(), padding - 5, y + 4);
     }
-    
-    // 绘制X轴
-    ctx.beginPath();
-    ctx.moveTo(leftPadding, 20 + chartHeight);
-    ctx.lineTo(leftPadding + chartWidth, 20 + chartHeight);
-    ctx.strokeStyle = '#999';
     ctx.stroke();
     
-    // 绘制X轴刻度和日期
-    dates.forEach((dateStr, index) => {
-      const x = leftPadding + index * xStep;
+    // 绘制X轴刻度和标签
+    ctx.textAlign = 'center';
+    dates.forEach((date, index) => {
+      const x = padding + (index / (dates.length - 1)) * chartWidth;
       
+      // 绘制X轴刻度
       ctx.beginPath();
-      ctx.moveTo(x, 20 + chartHeight);
-      ctx.lineTo(x, 20 + chartHeight + 5);
-      ctx.strokeStyle = '#999';
+      ctx.moveTo(x, canvas.height - padding);
+      ctx.lineTo(x, canvas.height - padding + 5);
       ctx.stroke();
       
-      // 格式化日期为简短格式（如"3/15"）
-      const date = new Date(dateStr);
-      const formattedDate = `${date.getMonth() + 1}/${date.getDate()}`;
-      
-      ctx.fillStyle = '#666';
-      ctx.font = '10px Arial';
-      ctx.textAlign = 'center';
-      ctx.fillText(formattedDate, x, 20 + chartHeight + 18);
+      // 绘制X轴标签
+      ctx.fillText(date, x, canvas.height - padding + 20);
     });
     
-    // 绘制数据点和连线
+    // 绘制数据点和折线
     ctx.beginPath();
+    ctx.strokeStyle = '#4285f4';
+    ctx.lineWidth = 2;
     
-    dates.forEach((dateStr, index) => {
-      const value = vulnsByDate[dateStr];
-      const x = leftPadding + index * xStep;
-      const y = 20 + chartHeight - (value / maxVulns) * chartHeight;
+    // 绘制折线
+    data.forEach((value, index) => {
+      const x = padding + (index / (data.length - 1)) * chartWidth;
+      const y = canvas.height - padding - (value / maxValue) * chartHeight;
       
       if (index === 0) {
         ctx.moveTo(x, y);
       } else {
         ctx.lineTo(x, y);
       }
-      
-      // 绘制数据点
-      ctx.fillStyle = '#3498db';
-      ctx.beginPath();
-      ctx.arc(x, y, 4, 0, Math.PI * 2);
-      ctx.fill();
-      
-      // 显示值
-      ctx.fillStyle = '#333';
-      ctx.font = '11px Arial';
-      ctx.textAlign = 'center';
-      ctx.fillText(value.toString(), x, y - 10);
     });
-    
-    // 绘制连线
-    ctx.strokeStyle = '#3498db';
-    ctx.lineWidth = 2;
     ctx.stroke();
     
-    // 添加标题
-    ctx.fillStyle = '#333';
-    ctx.font = 'bold 12px Arial';
+    // 绘制数据点
+    data.forEach((value, index) => {
+      const x = padding + (index / (data.length - 1)) * chartWidth;
+      const y = canvas.height - padding - (value / maxValue) * chartHeight;
+      
+      // 绘制数据点
+      ctx.beginPath();
+      ctx.fillStyle = '#4285f4';
+      ctx.arc(x, y, 4, 0, 2 * Math.PI);
+      ctx.fill();
+      
+      // 绘制白色边框
+      ctx.beginPath();
+      ctx.strokeStyle = 'white';
+      ctx.lineWidth = 2;
+      ctx.arc(x, y, 4, 0, 2 * Math.PI);
+      ctx.stroke();
+      
+      // 绘制数据标签
+      if (value > 0) {
+        ctx.fillStyle = '#333';
+        ctx.textAlign = 'center';
+        ctx.font = `bold ${CHART_COLORS.chartConfig.valueFontSize}px ${CHART_COLORS.chartConfig.fontFamily}`;
+        ctx.fillText(value.toString(), x, y - 15);
+      }
+    });
+    
+    // 添加图表标题
+    ctx.fillStyle = '#2c3e50';
     ctx.textAlign = 'center';
-    ctx.fillText('最近7天漏洞发现趋势', canvas.width / 2, 15);
+    ctx.font = `bold ${CHART_COLORS.chartConfig.titleFontSize}px ${CHART_COLORS.chartConfig.fontFamily}`;
+    ctx.fillText('最近7天漏洞发现趋势', canvas.width / 2, 20);
   }
   
   // 导出报告
@@ -822,4 +1036,651 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     );
   }
+  
+  // 导出CSV格式
+  function exportAsCSV() {
+    // 准备CSV头
+    let csvContent = "类型,URL,严重程度,发现时间,证据\n";
+    
+    // 添加每个漏洞的数据
+    allVulnerabilities.forEach(vuln => {
+      const type = vuln.type || '';
+      let url = '';
+      try {
+        url = new URL(vuln.details.location).toString();
+      } catch (e) {
+        url = vuln.details.location || '';
+      }
+      const severity = (vuln.details && vuln.details.severity) || '';
+      const timestamp = vuln.timestamp ? new Date(vuln.timestamp).toLocaleString() : '';
+      let evidence = '';
+      if (vuln.details && vuln.details.evidence) {
+        // 处理CSV中的特殊字符
+        evidence = vuln.details.evidence.replace(/"/g, '""');
+      }
+      
+      // 将字段用双引号包围，以处理包含逗号的内容
+      csvContent += `"${type}","${url}","${severity}","${timestamp}","${evidence}"\n`;
+    });
+    
+    // 创建下载
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `漏洞报告_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    
+    // 清理
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 100);
+  }
+  
+  // 导出JSON格式
+  function exportAsJSON() {
+    // 准备JSON数据
+    const exportData = {
+      summary: {
+        totalVulnerabilities: allVulnerabilities.length,
+        domains: Array.from(domains),
+        generatedAt: new Date().toISOString(),
+        version: '1.2.0'
+      },
+      vulnerabilities: allVulnerabilities
+    };
+    
+    // 转换为JSON字符串
+    const jsonContent = JSON.stringify(exportData, null, 2);
+    
+    // 创建下载
+    const blob = new Blob([jsonContent], { type: 'application/json;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `漏洞报告_${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    
+    // 清理
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 100);
+  }
+  
+  // 初始化页面
+  function initPage() {
+    // 初始化标签
+    initTabs();
+    // 初始化图表工具栏
+    initChartToolbar();
+    // 初始化事件监听
+    initEventListeners();
+    // 加载漏洞数据
+    loadVulnerabilities();
+  }
+  
+  // 初始化标签页切换功能
+  function initTabs() {
+    const tabs = document.querySelectorAll('.tab');
+    const tabContents = document.querySelectorAll('.tab-content');
+    
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        const tabId = tab.getAttribute('data-tab');
+        
+        // 移除所有活动状态
+        tabs.forEach(t => t.classList.remove('active'));
+        tabContents.forEach(content => content.classList.remove('active'));
+        
+        // 设置当前标签为活动状态
+        tab.classList.add('active');
+        const activeContent = document.getElementById(tabId);
+        if (activeContent) {
+          activeContent.classList.add('active');
+        } else {
+          console.warn(`找不到ID为${tabId}的标签内容`);
+        }
+      });
+    });
+  }
+  
+  // 初始化图表工具栏功能
+  function initChartToolbar() {
+    // 刷新图表按钮
+    const refreshButtons = document.querySelectorAll('.refresh-chart');
+    refreshButtons.forEach(button => {
+      button.addEventListener('click', (e) => {
+        const chartType = button.getAttribute('data-chart');
+        refreshChart(chartType);
+        e.stopPropagation();
+      });
+    });
+    
+    // 全屏查看按钮
+    const fullscreenButtons = document.querySelectorAll('.fullscreen-chart');
+    fullscreenButtons.forEach(button => {
+      button.addEventListener('click', (e) => {
+        const chartType = button.getAttribute('data-chart');
+        openChartFullscreen(chartType);
+        e.stopPropagation();
+      });
+    });
+  }
+  
+  // 刷新特定图表
+  function refreshChart(chartType) {
+    switch(chartType) {
+      case 'vulnerability-type':
+        drawVulnerabilityChart();
+        break;
+      case 'severity':
+        drawSeverityChart();
+        break;
+      case 'recent-activity':
+        drawRecentActivityChart();
+        break;
+      case 'domain-distribution':
+        drawDomainDistributionChart();
+        break;
+    }
+  }
+  
+  // 全屏查看图表
+  function openChartFullscreen(chartType) {
+    // 创建全屏遮罩
+    const fullscreenOverlay = document.createElement('div');
+    fullscreenOverlay.className = 'fullscreen-overlay';
+    fullscreenOverlay.style.position = 'fixed';
+    fullscreenOverlay.style.top = '0';
+    fullscreenOverlay.style.left = '0';
+    fullscreenOverlay.style.width = '100%';
+    fullscreenOverlay.style.height = '100%';
+    fullscreenOverlay.style.backgroundColor = 'rgba(255, 255, 255, 0.95)';
+    fullscreenOverlay.style.zIndex = '2000';
+    fullscreenOverlay.style.display = 'flex';
+    fullscreenOverlay.style.flexDirection = 'column';
+    fullscreenOverlay.style.alignItems = 'center';
+    fullscreenOverlay.style.justifyContent = 'center';
+    fullscreenOverlay.style.padding = '30px';
+    
+    // 创建关闭按钮
+    const closeButton = document.createElement('button');
+    closeButton.innerHTML = '<span class="material-symbols-outlined">close</span> 关闭';
+    closeButton.style.position = 'absolute';
+    closeButton.style.top = '20px';
+    closeButton.style.right = '20px';
+    closeButton.style.backgroundColor = '#f44336';
+    closeButton.style.color = 'white';
+    closeButton.style.border = 'none';
+    closeButton.style.borderRadius = '4px';
+    closeButton.style.padding = '8px 15px';
+    closeButton.style.cursor = 'pointer';
+    closeButton.style.display = 'flex';
+    closeButton.style.alignItems = 'center';
+    closeButton.style.gap = '5px';
+    closeButton.addEventListener('click', () => {
+      document.body.removeChild(fullscreenOverlay);
+    });
+    
+    // 创建标题
+    const title = document.createElement('h2');
+    title.style.marginBottom = '20px';
+    
+    // 创建图表容器
+    const chartContainer = document.createElement('div');
+    chartContainer.style.width = '80%';
+    chartContainer.style.height = '70%';
+    chartContainer.style.backgroundColor = 'white';
+    chartContainer.style.boxShadow = '0 5px 15px rgba(0,0,0,0.1)';
+    chartContainer.style.borderRadius = '8px';
+    chartContainer.style.padding = '20px';
+    
+    // 根据图表类型设置内容
+    switch(chartType) {
+      case 'vulnerability-type':
+        title.textContent = '漏洞类型分布';
+        drawVulnerabilityChartInContainer(chartContainer);
+        break;
+      case 'severity':
+        title.textContent = '漏洞严重程度分布';
+        drawSeverityChartInContainer(chartContainer);
+        break;
+      case 'recent-activity':
+        title.textContent = '最近检测活动';
+        drawRecentActivityChartInContainer(chartContainer);
+        break;
+      case 'domain-distribution':
+        title.textContent = '站点漏洞分布';
+        drawDomainDistributionChartInContainer(chartContainer);
+        break;
+    }
+    
+    // 组装全屏视图
+    fullscreenOverlay.appendChild(closeButton);
+    fullscreenOverlay.appendChild(title);
+    fullscreenOverlay.appendChild(chartContainer);
+    document.body.appendChild(fullscreenOverlay);
+  }
+  
+  // 在指定容器中绘制漏洞类型图表
+  function drawVulnerabilityChartInContainer(container) {
+    // 复用现有的绘制逻辑，但针对新容器
+    // 获取漏洞类型分布的数据
+    const vulnerabilityTypes = {};
+    let totalVulnerabilities = 0;
+
+    // 计算各类型漏洞数量
+    allVulnerabilities.forEach(vulnerability => {
+      const type = vulnerability.type || 'Other';
+      vulnerabilityTypes[type] = (vulnerabilityTypes[type] || 0) + 1;
+      totalVulnerabilities++;
+    });
+    
+    // 清空容器
+    container.innerHTML = '';
+    
+    // 如果没有漏洞数据，显示提示信息
+    if (totalVulnerabilities === 0) {
+      container.innerHTML = '<div class="no-data">暂无漏洞数据</div>';
+      return;
+    }
+    
+    // 创建Canvas元素
+    const canvas = document.createElement('canvas');
+    canvas.width = container.clientWidth - 40; // 考虑内边距
+    canvas.height = container.clientHeight - 40;
+    container.appendChild(canvas);
+    
+    // 获取绘图上下文
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    // 准备饼图数据
+    const data = [];
+    const labels = [];
+    const percentages = [];
+    
+    for (const type in vulnerabilityTypes) {
+      const count = vulnerabilityTypes[type];
+      const percentage = (count / totalVulnerabilities) * 100;
+      
+      data.push(count);
+      labels.push(type);
+      percentages.push(percentage.toFixed(1));
+    }
+    
+    // 绘制饼图
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2 - 30; // 向上偏移一点，为图例留出空间
+    const radius = Math.min(centerX, centerY) * 0.7;
+    
+    let startAngle = 0;
+    
+    // 创建图例容器
+    const legendDiv = document.createElement('div');
+    legendDiv.style.display = 'flex';
+    legendDiv.style.flexWrap = 'wrap';
+    legendDiv.style.justifyContent = 'center';
+    legendDiv.style.gap = '10px';
+    legendDiv.style.marginTop = '20px';
+    legendDiv.style.fontSize = '14px';
+    
+    // 绘制饼图扇区和创建图例
+    data.forEach((value, index) => {
+      const sliceAngle = (value / totalVulnerabilities) * 2 * Math.PI;
+      const endAngle = startAngle + sliceAngle;
+      
+      // 绘制扇区
+      ctx.beginPath();
+      ctx.moveTo(centerX, centerY);
+      ctx.arc(centerX, centerY, radius, startAngle, endAngle);
+      ctx.closePath();
+      
+      // 设置扇区颜色和描边
+      ctx.fillStyle = CHART_COLORS.vulnerabilityTypes[labels[index]] || CHART_COLORS.vulnerabilityTypes['default'];
+      ctx.strokeStyle = 'white';
+      ctx.lineWidth = 2;
+      ctx.fill();
+      ctx.stroke();
+      
+      // 创建图例项
+      const legendItem = document.createElement('div');
+      legendItem.style.display = 'flex';
+      legendItem.style.alignItems = 'center';
+      legendItem.style.padding = '5px 10px';
+      legendItem.style.backgroundColor = 'rgba(255, 255, 255, 0.7)';
+      legendItem.style.borderRadius = '4px';
+      legendItem.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
+      
+      // 创建颜色方块
+      const colorBox = document.createElement('span');
+      colorBox.style.display = 'inline-block';
+      colorBox.style.width = '14px';
+      colorBox.style.height = '14px';
+      colorBox.style.backgroundColor = CHART_COLORS.vulnerabilityTypes[labels[index]] || CHART_COLORS.vulnerabilityTypes['default'];
+      colorBox.style.marginRight = '8px';
+      colorBox.style.borderRadius = '2px';
+      
+      // 创建标签文本
+      const labelText = document.createElement('span');
+      labelText.textContent = `${labels[index]}: ${value} (${percentages[index]}%)`;
+      
+      // 组装图例项
+      legendItem.appendChild(colorBox);
+      legendItem.appendChild(labelText);
+      legendDiv.appendChild(legendItem);
+      
+      // 更新起始角度
+      startAngle = endAngle;
+    });
+    
+    // 添加图例到容器
+    container.appendChild(legendDiv);
+  }
+  
+  // 在指定容器中绘制严重程度图表
+  function drawSeverityChartInContainer(container) {
+    // 与drawVulnerabilityChartInContainer类似，但处理严重程度数据
+    // 获取漏洞严重程度分布的数据
+    const severityCounts = {
+      'critical': 0,
+      'high': 0,
+      'medium': 0,
+      'low': 0,
+      'info': 0
+    };
+    let totalVulnerabilities = 0;
+
+    // 计算各严重程度漏洞数量
+    allVulnerabilities.forEach(vulnerability => {
+      const severity = (vulnerability.details && vulnerability.details.severity) 
+        ? vulnerability.details.severity.toLowerCase() 
+        : 'info';
+      
+      // 确保使用有效的严重级别键
+      const validSeverity = severityCounts.hasOwnProperty(severity) ? severity : 'info';
+      severityCounts[validSeverity]++;
+      totalVulnerabilities++;
+    });
+    
+    // 清空容器
+    container.innerHTML = '';
+    
+    // 如果没有漏洞数据，显示提示信息
+    if (totalVulnerabilities === 0) {
+      container.innerHTML = '<div class="no-data">暂无漏洞数据</div>';
+      return;
+    }
+    
+    // 创建Canvas元素
+    const canvas = document.createElement('canvas');
+    canvas.width = container.clientWidth - 40;
+    canvas.height = container.clientHeight - 40;
+    container.appendChild(canvas);
+    
+    // 获取绘图上下文
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    // 准备饼图数据
+    const data = [];
+    const labels = [];
+    const percentages = [];
+    
+    for (const severity in severityCounts) {
+      if (severityCounts[severity] > 0) {
+        const count = severityCounts[severity];
+        const percentage = (count / totalVulnerabilities) * 100;
+        
+        data.push(count);
+        labels.push(severity);
+        percentages.push(percentage.toFixed(1));
+      }
+    }
+    
+    // 绘制饼图
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2 - 30;
+    const radius = Math.min(centerX, centerY) * 0.7;
+    
+    let startAngle = 0;
+    
+    // 创建图例容器
+    const legendDiv = document.createElement('div');
+    legendDiv.style.display = 'flex';
+    legendDiv.style.flexWrap = 'wrap';
+    legendDiv.style.justifyContent = 'center';
+    legendDiv.style.gap = '10px';
+    legendDiv.style.marginTop = '20px';
+    legendDiv.style.fontSize = '14px';
+    
+    // 绘制饼图扇区和创建图例
+    data.forEach((value, index) => {
+      const sliceAngle = (value / totalVulnerabilities) * 2 * Math.PI;
+      const endAngle = startAngle + sliceAngle;
+      
+      // 绘制扇区
+      ctx.beginPath();
+      ctx.moveTo(centerX, centerY);
+      ctx.arc(centerX, centerY, radius, startAngle, endAngle);
+      ctx.closePath();
+      
+      // 设置扇区颜色和描边
+      ctx.fillStyle = CHART_COLORS.severityLevels[labels[index]];
+      ctx.strokeStyle = 'white';
+      ctx.lineWidth = 2;
+      ctx.fill();
+      ctx.stroke();
+      
+      // 创建图例项
+      const legendItem = document.createElement('div');
+      legendItem.style.display = 'flex';
+      legendItem.style.alignItems = 'center';
+      legendItem.style.padding = '5px 10px';
+      legendItem.style.backgroundColor = 'rgba(255, 255, 255, 0.7)';
+      legendItem.style.borderRadius = '4px';
+      legendItem.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
+      
+      // 创建颜色方块
+      const colorBox = document.createElement('span');
+      colorBox.style.display = 'inline-block';
+      colorBox.style.width = '14px';
+      colorBox.style.height = '14px';
+      colorBox.style.backgroundColor = CHART_COLORS.severityLevels[labels[index]];
+      colorBox.style.marginRight = '8px';
+      colorBox.style.borderRadius = '2px';
+      
+      // 创建标签文本
+      const labelText = document.createElement('span');
+      // 将严重程度首字母大写
+      const severityLabel = labels[index].charAt(0).toUpperCase() + labels[index].slice(1);
+      labelText.textContent = `${severityLabel}: ${value} (${percentages[index]}%)`;
+      
+      // 组装图例项
+      legendItem.appendChild(colorBox);
+      legendItem.appendChild(labelText);
+      legendDiv.appendChild(legendItem);
+      
+      // 更新起始角度
+      startAngle = endAngle;
+    });
+    
+    // 添加图例到容器
+    container.appendChild(legendDiv);
+  }
+  
+  // 在指定容器中绘制最近活动图表
+  function drawRecentActivityChartInContainer(container) {
+    // 实现此函数...
+    // 类似于drawRecentActivityChart，但针对新容器
+  }
+  
+  // 在指定容器中绘制域名分布图表
+  function drawDomainDistributionChartInContainer(container) {
+    // 实现此函数...
+    // 类似于drawDomainDistributionChart，但针对新容器
+  }
+  
+  // 注册所有事件监听器
+  function initEventListeners() {
+    // 导出按钮
+    safeAddEventListener(safeGetElement('export-markdown'), 'click', exportReport);
+    safeAddEventListener(safeGetElement('export-csv'), 'click', exportAsCSV);
+    safeAddEventListener(safeGetElement('export-pdf'), 'click', exportAsPDF);
+    safeAddEventListener(safeGetElement('export-json'), 'click', exportAsJSON);
+    
+    // 返回设置按钮
+    safeAddEventListener(safeGetElement('back-to-settings'), 'click', () => {
+      window.location.href = 'popup.html';
+    });
+    
+    // 搜索功能
+    const searchInput = safeGetElement('search-input');
+    const searchButton = safeGetElement('search-button');
+    
+    safeAddEventListener(searchButton, 'click', () => {
+      const query = searchInput.value.toLowerCase().trim();
+      if (query) {
+        searchVulnerabilities(query);
+      } else {
+        filterVulnerabilities(); // 重置为原始列表
+      }
+    });
+    
+    safeAddEventListener(searchInput, 'keypress', (e) => {
+      if (e.key === 'Enter') {
+        searchButton.click();
+      }
+    });
+    
+    // 筛选器
+    safeAddEventListener(safeGetElement('type-filter'), 'change', filterVulnerabilities);
+    safeAddEventListener(safeGetElement('domain-filter'), 'change', filterVulnerabilities);
+    
+    // 分页
+    safeAddEventListener(safeGetElement('prev-page'), 'click', () => navigatePage(-1));
+    safeAddEventListener(safeGetElement('next-page'), 'click', () => navigatePage(1));
+  }
+  
+  // 搜索漏洞
+  function searchVulnerabilities(query) {
+    filteredVulnerabilities = allVulnerabilities.filter(vuln => {
+      // 搜索类型
+      if (vuln.type && vuln.type.toLowerCase().includes(query)) {
+        return true;
+      }
+      
+      // 搜索URL
+      if (vuln.details && vuln.details.location && 
+          vuln.details.location.toLowerCase().includes(query)) {
+        return true;
+      }
+      
+      // 搜索证据
+      if (vuln.details && vuln.details.evidence && 
+          vuln.details.evidence.toLowerCase().includes(query)) {
+        return true;
+      }
+      
+      // 搜索严重程度
+      if (vuln.details && vuln.details.severity && 
+          vuln.details.severity.toLowerCase().includes(query)) {
+        return true;
+      }
+      
+      return false;
+    });
+    
+    // 重置到第一页
+    currentPage = 1;
+    displayVulnerabilities();
+    updatePagination();
+  }
+  
+  // 显示错误消息
+  function showErrorMessage(message) {
+    console.error(message);
+    
+    // 创建错误消息元素
+    const errorDiv = document.createElement('div');
+    errorDiv.className = 'error-message';
+    errorDiv.textContent = message;
+    
+    // 添加样式
+    errorDiv.style.padding = '10px 15px';
+    errorDiv.style.margin = '10px 0';
+    errorDiv.style.backgroundColor = '#f8d7da';
+    errorDiv.style.color = '#721c24';
+    errorDiv.style.border = '1px solid #f5c6cb';
+    errorDiv.style.borderRadius = '4px';
+    
+    // 查找错误消息容器
+    const errorContainer = document.getElementById('error-container') || 
+                           document.getElementById('messages') || 
+                           document.body;
+    
+    if (errorContainer) {
+      // 在容器的顶部插入错误消息
+      errorContainer.insertBefore(errorDiv, errorContainer.firstChild);
+      
+      // 3秒后自动移除错误消息
+      setTimeout(() => {
+        if (errorDiv.parentNode) {
+          errorDiv.parentNode.removeChild(errorDiv);
+        }
+      }, 3000);
+    } else {
+      console.error('找不到错误容器元素');
+    }
+  }
+
+  // 清除漏洞数据
+  function clearData() {
+    if (confirm('确定要清除所有漏洞数据吗？此操作不可撤销。')) {
+      safeSendMessage({action: 'clearVulnerabilities'}, (response) => {
+        if (response && response.success) {
+          // 清除本地数据
+          allVulnerabilities = [];
+          filteredVulnerabilities = [];
+          domains = new Set();
+          
+          // 更新UI
+          showNoResults();
+          updateStatistics();
+          
+          // 重置过滤器
+          if (filterType) filterType.value = 'all';
+          if (filterDomain) {
+            filterDomain.innerHTML = '<option value="all">所有站点</option>';
+          }
+          
+          // 通知用户
+          showErrorMessage('所有漏洞数据已清除');
+          
+          // 重新绘制图表
+          if (typeof drawVulnerabilityChart === 'function') {
+            drawVulnerabilityChart();
+          }
+          if (typeof drawSeverityChart === 'function') {
+            drawSeverityChart();
+          }
+          if (typeof drawDomainDistributionChart === 'function') {
+            drawDomainDistributionChart();
+          }
+          if (typeof drawRecentActivityChart === 'function') {
+            drawRecentActivityChart();
+          }
+        } else {
+          showErrorMessage('清除数据失败: ' + (response?.error || '未知错误'));
+        }
+      });
+    }
+  }
+
+  // 初始化
+  initPage();
 });

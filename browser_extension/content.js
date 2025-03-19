@@ -1,3 +1,17 @@
+// 全局漏洞检测设置
+let vulnerabilityDetectionSettings = {
+  detectionMode: 'active',
+  detectionDepth: 3,
+  vulnerabilityTypes: {
+    xss: true,
+    sqli: true,
+    csrf: true,
+    ssrf: true,
+    infoLeakage: true,
+    headers: true
+  }
+};
+
 class DOMAnalyzer {
   constructor() {
     this.interactionElements = ['form', 'input', 'button', 'a', 'select', 'textarea', 'checkbox', 'radio'];
@@ -1043,7 +1057,7 @@ class PayloadGenerator {
       '..%252f..%252f..%252fetc%252fpasswd',
       '%2e%2e%2f%2e%2e%2f%2e%2e%2fetc%2fpasswd',
       '..%c0%af..%c0%af..%c0%afetc%c0%afpasswd',
-      '/%5C../%5C../%5C../%5C../%5C../%5C../%5C../%5C../%5C../%5C../%5C../%5C../%5C../etc/passwd'
+      '/%5C../%5C../%5C../%5C../%5C../%5C../%5C../%5C../%5C../%5C../%5C../%5C../etc/passwd'
     ];
     
     // 添加不安全反序列化测试载荷
@@ -1075,7 +1089,7 @@ class PayloadGenerator {
       }
       
       // 邮箱输入
-      if (type === 'email' || name.includes('email') || placeholder.includes('email') || id.includes('email')) {
+      if (type === 'email' || name.includes('email') || placeholder.includes('email')) {
         return this.generateEmailPayload();
       }
       
@@ -1336,8 +1350,15 @@ class VulnerabilityDetector {
       '<div data-xss-test="1">XSS Test</div>',
       '"><svg/onload=alert("XSS Detected")>',
       '\'><iframe/srcdoc="<script>alert(\'XSS Detected\')</script>">',
-      'javascript:alert("XSS Detected")'
+      'javascript:alert("XSS Detected")',
+      '\'">><marquee><img src=x onerror=confirm(1)></marquee>\'',
+      '\'">><img src=x:alert(1)>\'',
+      '\'">><<img src=x:alert(1)>\'',
+      '">><<script>alert(1)</script>',
+      '\'"</script><script>alert(1)</script>',
+      '\';</script><script>alert(1)</script>'
     ];
+    
     this.sqlInjectionPayloads = [
       "' OR '1'='1",
       "' OR '1'='1' --",
@@ -1348,9 +1369,926 @@ class VulnerabilityDetector {
       "1'; SELECT * FROM information_schema.tables; --",
       "' OR 1=1 #",
       "') OR ('1'='1",
+      "' OR 1=1 LIMIT 1;#",
+      "' UNION SELECT NULL,NULL,NULL,version();--",
+      "admin' OR 1=1;--",
+      "1; WAITFOR DELAY '0:0:5' --",
+      "'; IF (1=1) WAITFOR DELAY '0:0:5' --"
     ];
     
-    // 初始化其他功能...
+    this.csrfTestPayloads = [
+      "<form id='csrf-test-form' action='TARGET_URL' method='post'><input type='hidden' name='test' value='csrf-test'></form>",
+      "<iframe style='display:none' name='csrf-frame'></iframe><form target='csrf-frame' id='csrf-test' action='TARGET_URL' method='post'><input type='hidden' name='test' value='csrf-test'></form>"
+    ];
+    
+    this.domMutationObserver = null;
+    this.responseObserver = null;
+    this.errorObserver = null;
+    this.initialState = {};
+    this.vulnerabilitySignatures = {
+      xss: [
+        'XSS Detected',
+        'alert(',
+        'confirm(',
+        'prompt(',
+        'document.cookie',
+        'eval(',
+        'innerHTML',
+        'outerHTML',
+        'document.write',
+        'document.domain'
+      ],
+      sqli: [
+        'SQL syntax',
+        'mysql_',
+        'mysqli_',
+        'ORA-',
+        'syntax error',
+        'Microsoft SQL',
+        'PostgreSQL',
+        'SQLite',
+        'Division by zero',
+        'warning: mysql',
+        'Unclosed quotation mark',
+        'ODBC'
+      ],
+      csrf: [
+        'csrf',
+        'xsrf',
+        'cross-site'
+      ],
+      ssrf: [
+        'connection failed',
+        'network error',
+        'timeout',
+        'no route to host',
+        'could not resolve host'
+      ]
+    };
+    
+    // 设置最大检测重试次数
+    this.maxRetries = 3;
+    
+    // 初始化DOM变化观察器
+    this.initDomObserver();
+    
+    // 初始化网络请求拦截
+    this.initNetworkIntercept();
+    
+    // 初始化错误监听
+    this.initErrorObserver();
+    
+    // 应用漏洞检测设置
+    this.applyDetectionSettings(vulnerabilityDetectionSettings);
+  }
+  
+  // 应用漏洞检测设置
+  applyDetectionSettings(settings) {
+    this.detectionMode = settings.detectionMode || 'active';
+    this.detectionDepth = settings.detectionDepth || 3;
+    this.enabledVulnerabilityTypes = settings.vulnerabilityTypes || {
+      xss: true,
+      sqli: true,
+      csrf: true,
+      ssrf: true,
+      infoLeakage: true,
+      headers: true
+    };
+    
+    // 根据检测深度调整测试强度和范围
+    this.adjustTestIntensity();
+    
+    console.log(`[漏洞检测] 已应用设置: 模式=${this.detectionMode}, 深度=${this.detectionDepth}, 类型=`, this.enabledVulnerabilityTypes);
+  }
+  
+  // 根据检测深度调整测试强度
+  adjustTestIntensity() {
+    // 调整XSS测试
+    if (this.detectionDepth <= 1) {
+      // 浅层检测：使用较少的payload
+      this.xssPayloads = this.xssPayloads.slice(0, 3);
+    } else if (this.detectionDepth >= 4) {
+      // 深度检测：添加更多payload
+      this.xssPayloads = [
+        ...this.xssPayloads,
+        '"><svg onload=alert(1)>',
+        "<img src=1 onerror='alert(\"XSS Detected\")'>"
+      ];
+    }
+    
+    // 调整SQL注入测试
+    if (this.detectionDepth <= 1) {
+      // 浅层检测：使用较少的payload
+      this.sqlInjectionPayloads = this.sqlInjectionPayloads.slice(0, 3);
+    } else if (this.detectionDepth >= 4) {
+      // 深度检测：添加更多payload
+      this.sqlInjectionPayloads = [
+        ...this.sqlInjectionPayloads,
+        "UNION ALL SELECT @@version,NULL#",
+        "AND (SELECT 1 FROM (SELECT COUNT(*),CONCAT(VERSION(),FLOOR(RAND(0)*2))x FROM INFORMATION_SCHEMA.TABLES GROUP BY x)a)"
+      ];
+    }
+    
+    // 设置观察器启用状态
+    if (this.detectionMode === 'passive') {
+      // 被动模式：不发送额外请求，只观察DOM
+      this.enableNetworkIntercept = false;
+    } else {
+      // 主动/深度模式：拦截网络请求
+      this.enableNetworkIntercept = true;
+    }
+    
+    // 设置重试次数
+    this.maxRetries = this.detectionDepth * 2;
+  }
+  
+  // 初始化DOM变化观察器
+  initDomObserver() {
+    // 清除之前的observer
+    if (this.domMutationObserver) {
+      this.domMutationObserver.disconnect();
+    }
+    
+    // 创建新的observer
+    this.domMutationObserver = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        // 检查是否有新节点添加
+        if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+          for (const node of mutation.addedNodes) {
+            if (node.nodeType === Node.ELEMENT_NODE) {
+              // 检查新添加的元素是否可能是XSS攻击的结果
+              this.checkNodeForXSS(node);
+            }
+          }
+        }
+        // 检查属性变化
+        else if (mutation.type === 'attributes') {
+          const node = mutation.target;
+          this.checkAttributesForXSS(node, mutation.attributeName);
+        }
+      }
+    });
+    
+    // 开始观察整个文档
+    this.domMutationObserver.observe(document.documentElement, {
+      childList: true,
+      attributes: true,
+      characterData: true,
+      subtree: true,
+      attributeOldValue: true,
+      characterDataOldValue: true
+    });
+  }
+  
+  // 初始化网络请求拦截
+  initNetworkIntercept() {
+    // 使用Fetch API拦截
+    const originalFetch = window.fetch;
+    
+    window.fetch = async (...args) => {
+      const url = args[0] instanceof Request ? args[0].url : args[0];
+      const options = args[0] instanceof Request ? args[0] : args[1] || {};
+      
+      try {
+        // 记录请求前的状态
+        const beforeState = this.captureState();
+        
+        // 执行原始fetch请求
+        const response = await originalFetch(...args);
+        
+        // 克隆响应以便可以读取内容
+        const clonedResponse = response.clone();
+        
+        // 检查是否为文本或HTML响应
+        const contentType = response.headers.get('content-type') || '';
+        if (contentType.includes('text/html') || contentType.includes('text/plain') || contentType.includes('application/json')) {
+          try {
+            // 获取响应内容
+            const text = await clonedResponse.text();
+            
+            // 检测响应中的漏洞
+            this.analyzeResponse(url, text, beforeState);
+          } catch (e) {
+            console.error('读取响应内容时出错:', e);
+          }
+        }
+        
+        // 检查响应头
+        this.checkResponseHeaders(url, response.headers);
+        
+        return response;
+      } catch (error) {
+        // 检查错误是否表明存在漏洞
+        this.analyzeError(url, error);
+        throw error;
+      }
+    };
+    
+    // 拦截XHR请求
+    const originalXHROpen = XMLHttpRequest.prototype.open;
+    const originalXHRSend = XMLHttpRequest.prototype.send;
+    
+    XMLHttpRequest.prototype.open = function(...args) {
+      this._url = args[1]; // 保存URL
+      return originalXHROpen.apply(this, args);
+    };
+    
+    XMLHttpRequest.prototype.send = function(data) {
+      // 保存请求前的状态
+      const beforeState = this.captureState();
+      
+      // 添加响应处理程序
+      this.addEventListener('load', () => {
+        try {
+          // 检查内容类型
+          const contentType = this.getResponseHeader('content-type') || '';
+          if (contentType.includes('text/html') || contentType.includes('text/plain') || contentType.includes('application/json')) {
+            // 分析响应
+            this.analyzeResponse(this._url, this.responseText, beforeState);
+          }
+          
+          // 检查响应头
+          const headers = new Map();
+          const headersString = this.getAllResponseHeaders();
+          const headerPairs = headersString.split('\u000d\u000a'); // CRLF分隔
+          
+          for (let i = 0; i < headerPairs.length; i++) {
+            const headerPair = headerPairs[i];
+            const index = headerPair.indexOf('\u003a\u0020'); // ": "
+            if (index > 0) {
+              const key = headerPair.substring(0, index);
+              const value = headerPair.substring(index + 2);
+              headers.set(key.toLowerCase(), value);
+            }
+          }
+          
+          this.checkResponseHeaders(this._url, headers);
+        } catch (e) {
+          console.error('处理XHR响应时出错:', e);
+        }
+      });
+      
+      // 添加错误处理程序
+      this.addEventListener('error', (e) => {
+        this.analyzeError(this._url, e);
+      });
+      
+      return originalXHRSend.apply(this, arguments);
+    };
+  }
+  
+  // 初始化错误观察器
+  initErrorObserver() {
+    window.addEventListener('error', (e) => {
+      // 过滤掉常见的良性错误
+      if (e.message && !e.message.includes('Script error') && !e.message.includes('ResizeObserver')) {
+        this.analyzeError(window.location.href, e);
+      }
+    });
+    
+    // 捕获未处理的Promise拒绝
+    window.addEventListener('unhandledrejection', (e) => {
+      this.analyzeError(window.location.href, e.reason);
+    });
+  }
+  
+  // 捕获当前页面状态
+  captureState() {
+    return {
+      url: window.location.href,
+      title: document.title,
+      cookies: document.cookie,
+      localStorage: { ...localStorage },
+      sessionStorage: { ...sessionStorage },
+      dom: document.documentElement.outerHTML.substring(0, 10000), // 限制大小
+      timestamp: Date.now()
+    };
+  }
+  
+  // 检测节点是否包含XSS漏洞特征
+  checkNodeForXSS(node) {
+    // 检查是否有脚本元素
+    if (node.tagName === 'SCRIPT') {
+      const scriptContent = node.textContent || '';
+      for (const signature of this.vulnerabilitySignatures.xss) {
+        if (scriptContent.includes(signature)) {
+          this.recordVulnerability('XSS', {
+            evidence: `检测到可疑脚本: ${scriptContent.substring(0, 100)}...`,
+            element: node.outerHTML,
+            severity: 'High',
+            description: '页面中插入了可疑的脚本代码，可能是XSS攻击的结果。'
+          });
+          return;
+        }
+      }
+    }
+    
+    // 检查inline事件处理程序
+    for (const attr of node.attributes || []) {
+      if (attr.name.startsWith('on') && attr.value) {
+        for (const signature of this.vulnerabilitySignatures.xss) {
+          if (attr.value.includes(signature)) {
+            this.recordVulnerability('XSS', {
+              evidence: `检测到可疑事件处理程序: ${node.outerHTML}`,
+              element: node.outerHTML,
+              severity: 'High',
+              description: '元素包含可疑的内联事件处理程序，可能是XSS攻击的结果。'
+            });
+            return;
+          }
+        }
+      }
+    }
+    
+    // 检查iframe和frame
+    if (node.tagName === 'IFRAME' || node.tagName === 'FRAME') {
+      const src = node.getAttribute('src') || '';
+      if (src.startsWith('javascript:')) {
+        this.recordVulnerability('XSS', {
+          evidence: `检测到javascript:协议在iframe中: ${node.outerHTML}`,
+          element: node.outerHTML,
+          severity: 'High',
+          description: 'iframe使用javascript:协议，这是一种常见的XSS攻击载体。'
+        });
+      }
+    }
+    
+    // 递归检查子节点
+    for (const child of node.childNodes) {
+      if (child.nodeType === Node.ELEMENT_NODE) {
+        this.checkNodeForXSS(child);
+      }
+    }
+  }
+  
+  // 检查属性是否包含XSS漏洞特征
+  checkAttributesForXSS(node, attributeName) {
+    const attr = node.getAttribute(attributeName);
+    if (!attr) return;
+    
+    // 检查危险属性
+    if (attributeName.startsWith('on') || // 事件处理程序
+        (attributeName === 'src' && (node.tagName === 'SCRIPT' || node.tagName === 'IFRAME' || node.tagName === 'FRAME')) || // 脚本或框架源
+        (attributeName === 'href' && node.tagName === 'A' && attr.startsWith('javascript:')) // javascript:协议链接
+    ) {
+      for (const signature of this.vulnerabilitySignatures.xss) {
+        if (attr.includes(signature)) {
+          this.recordVulnerability('XSS', {
+            evidence: `检测到属性中的可疑内容: ${node.outerHTML}`,
+            element: node.outerHTML,
+            severity: 'High',
+            description: `元素的${attributeName}属性包含可疑内容，可能是XSS攻击的结果。`
+          });
+          return;
+        }
+      }
+    }
+  }
+  
+  // 分析HTTP响应
+  analyzeResponse(url, responseText, beforeState) {
+    // 检查XSS标志
+    for (const signature of this.vulnerabilitySignatures.xss) {
+      if (responseText.includes(signature)) {
+        this.recordVulnerability('XSS', {
+          evidence: `响应中包含XSS指纹: ${responseText.substring(responseText.indexOf(signature) - 20, responseText.indexOf(signature) + signature.length + 20)}`,
+          location: url,
+          severity: 'High',
+          description: '服务器响应包含可能的XSS攻击代码。'
+        });
+      }
+    }
+    
+    // 检查SQL注入标志
+    for (const signature of this.vulnerabilitySignatures.sqli) {
+      if (responseText.includes(signature)) {
+        this.recordVulnerability('SQL注入', {
+          evidence: `响应中包含SQL注入指纹: ${responseText.substring(responseText.indexOf(signature) - 20, responseText.indexOf(signature) + signature.length + 20)}`,
+          location: url,
+          severity: 'Critical',
+          description: '服务器响应包含SQL错误消息，表明可能存在SQL注入漏洞。'
+        });
+      }
+    }
+    
+    // 检查敏感信息泄露
+    this.checkSensitiveInfoLeakage(url, responseText);
+    
+    // 比较前后状态，检测CSRF攻击
+    this.checkStateChanges(beforeState, this.captureState(), url);
+  }
+  
+  // 检查HTTP响应头
+  checkResponseHeaders(url, headers) {
+    // 安全头部检查
+    const securityHeaders = {
+      'content-security-policy': false,
+      'x-content-type-options': false,
+      'x-frame-options': false,
+      'x-xss-protection': false,
+      'strict-transport-security': false,
+      'referrer-policy': false
+    };
+    
+    // 检查CORS头
+    const corsHeaders = {
+      'access-control-allow-origin': null,
+      'access-control-allow-credentials': null
+    };
+    
+    // 检查头部
+    headers.forEach((value, name) => {
+      const lowerName = name.toLowerCase();
+      if (securityHeaders.hasOwnProperty(lowerName)) {
+        securityHeaders[lowerName] = true;
+      }
+      
+      if (corsHeaders.hasOwnProperty(lowerName)) {
+        corsHeaders[lowerName] = value;
+      }
+    });
+    
+    // 检查缺失的安全头
+    const missingHeaders = Object.keys(securityHeaders).filter(header => !securityHeaders[header]);
+    if (missingHeaders.length > 0) {
+      this.recordVulnerability('不安全的HTTP头部', {
+        evidence: `缺少关键安全头部: ${missingHeaders.join(', ')}`,
+        location: url,
+        severity: 'Medium',
+        description: '响应缺少重要的安全HTTP头部，可能导致安全风险。'
+      });
+    }
+    
+    // 检查不安全的CORS配置
+    if (corsHeaders['access-control-allow-origin'] === '*' && corsHeaders['access-control-allow-credentials'] === 'true') {
+      this.recordVulnerability('不安全的CORS配置', {
+        evidence: `发现不安全的CORS配置: Access-Control-Allow-Origin: * 与 Access-Control-Allow-Credentials: true 同时存在`,
+        location: url,
+        severity: 'High',
+        description: '这种CORS配置允许任何源站带凭证访问资源，会导致严重的安全风险。'
+      });
+    }
+  }
+  
+  // 分析错误是否表明漏洞
+  analyzeError(url, error) {
+    const errorStr = error.toString();
+    
+    // 检查SQL注入错误
+    for (const signature of this.vulnerabilitySignatures.sqli) {
+      if (errorStr.includes(signature)) {
+        this.recordVulnerability('SQL注入', {
+          evidence: `错误消息表明可能的SQL注入: ${errorStr}`,
+          location: url,
+          severity: 'Critical',
+          description: '错误消息包含SQL相关内容，表明可能存在SQL注入漏洞。'
+        });
+        return;
+      }
+    }
+    
+    // 检查SSRF错误
+    for (const signature of this.vulnerabilitySignatures.ssrf) {
+      if (errorStr.includes(signature)) {
+        this.recordVulnerability('SSRF漏洞', {
+          evidence: `错误消息表明可能的SSRF漏洞: ${errorStr}`,
+          location: url,
+          severity: 'High',
+          description: '错误消息表明服务器可能尝试访问内部资源，存在SSRF漏洞。'
+        });
+        return;
+      }
+    }
+  }
+  
+  // 检查敏感信息泄露
+  checkSensitiveInfoLeakage(url, content) {
+    // 身份证号
+    const idCardRegex = /(^[1-9]\d{5}(18|19|20)\d{2}((0[1-9])|(1[0-2]))(([0-2][1-9])|10|20|30|31)\d{3}[0-9Xx]$)/g;
+    const idCards = content.match(idCardRegex);
+    
+    if (idCards && idCards.length > 0) {
+      this.recordVulnerability('敏感信息泄露', {
+        evidence: `检测到可能的身份证号码: ${idCards[0].substring(0, 6)}****${idCards[0].substring(idCards[0].length - 4)}`,
+        location: url,
+        severity: 'High',
+        description: '页面中包含疑似身份证号码，这是敏感的个人信息。'
+      });
+    }
+    
+    // 手机号
+    const phoneRegex = /(^1[3456789]\d{9}$)/g;
+    const phones = content.match(phoneRegex);
+    
+    if (phones && phones.length > 0) {
+      this.recordVulnerability('敏感信息泄露', {
+        evidence: `检测到可能的手机号码: ${phones[0].substring(0, 3)}****${phones[0].substring(phones[0].length - 4)}`,
+        location: url,
+        severity: 'Medium',
+        description: '页面中包含疑似手机号码，这是敏感的个人信息。'
+      });
+    }
+    
+    // 电子邮件地址
+    const emailRegex = /([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9._-]+)/g;
+    const emails = content.match(emailRegex);
+    
+    if (emails && emails.length > 0) {
+      this.recordVulnerability('敏感信息泄露', {
+        evidence: `检测到电子邮件地址: ${emails[0]}`,
+        location: url,
+        severity: 'Medium',
+        description: '页面中包含电子邮件地址，这可能泄露用户信息。'
+      });
+    }
+    
+    // 检查API密钥格式
+    const apiKeyPatterns = [
+      /(['"])?(aws|amazon)_?(access|secret)?_?(key|id)(['"])?s*[:=]s*(['"])?[A-Za-z0-9/+]{40,}(['"])?/g,  // AWS
+      /(['"])?api[_-]?key(['"])?s*[:=]s*(['"])?[A-Za-z0-9]{32,}(['"])?/gi,  // 通用API密钥
+      /(['"])?sk_live_[0-9a-zA-Z]{24,}(['"])?/g  // Stripe密钥
+    ];
+    
+    for (const pattern of apiKeyPatterns) {
+      const matches = content.match(pattern);
+      if (matches && matches.length > 0) {
+        this.recordVulnerability('敏感信息泄露', {
+          evidence: `检测到可能的API密钥: ${matches[0]}`,
+          location: url,
+          severity: 'Critical',
+          description: '页面中包含可能的API密钥，这可能导致严重的安全问题。'
+        });
+      }
+    }
+  }
+  
+  // 检查状态变化，识别CSRF攻击
+  checkStateChanges(beforeState, afterState, url) {
+    // 检查Cookie变化
+    if (beforeState.cookies !== afterState.cookies) {
+      // 检查是否有认证相关Cookie变化
+      const beforeCookies = this.parseCookies(beforeState.cookies);
+      const afterCookies = this.parseCookies(afterState.cookies);
+      
+      const changedAuthCookies = Object.keys(afterCookies).filter(name => {
+        return (name.toLowerCase().includes('auth') || 
+                name.toLowerCase().includes('session') || 
+                name.toLowerCase().includes('token') || 
+                name.toLowerCase().includes('id')) && 
+               beforeCookies[name] !== afterCookies[name];
+      });
+      
+      if (changedAuthCookies.length > 0) {
+        this.recordVulnerability('潜在的CSRF漏洞', {
+          evidence: `在请求后认证相关Cookie发生变化: ${changedAuthCookies.join(', ')}`,
+          location: url,
+          severity: 'High',
+          description: '请求导致认证相关Cookie发生变化，但可能没有正确的CSRF保护。'
+        });
+      }
+    }
+    
+    // 检查localStorage或sessionStorage的关键变化
+    const checkStorageChanges = (before, after, storageName) => {
+      const authKeys = Object.keys(after).filter(key => {
+        return (key.toLowerCase().includes('auth') || 
+                key.toLowerCase().includes('session') || 
+                key.toLowerCase().includes('token') || 
+                key.toLowerCase().includes('user')) && 
+               before[key] !== after[key];
+      });
+      
+      if (authKeys.length > 0) {
+        this.recordVulnerability('潜在的CSRF漏洞', {
+          evidence: `在请求后${storageName}中的认证数据发生变化: ${authKeys.join(', ')}`,
+          location: url,
+          severity: 'High',
+          description: `请求导致${storageName}中的认证数据发生变化，但可能没有正确的CSRF保护。`
+        });
+      }
+    };
+    
+    checkStorageChanges(beforeState.localStorage, afterState.localStorage, 'localStorage');
+    checkStorageChanges(beforeState.sessionStorage, afterState.sessionStorage, 'sessionStorage');
+  }
+  
+  // 解析Cookie字符串为对象
+  parseCookies(cookieStr) {
+    const cookies = {};
+    if (!cookieStr) return cookies;
+    
+    const parts = cookieStr.split(';');
+    for (const part of parts) {
+      const [name, value] = part.trim().split('=');
+      if (name) cookies[name] = value || '';
+    }
+    
+    return cookies;
+  }
+  
+  // 检测漏洞
+  detectVulnerabilities(initialState) {
+    // 如果检测被禁用，则直接返回
+    if (this.detectionMode === 'disabled') {
+      console.log('[漏洞检测] 检测已禁用');
+      return;
+    }
+    
+    // 根据启用的漏洞类型选择性检测
+    if (this.enabledVulnerabilityTypes.xss) {
+      this.detectXSS();
+    }
+    
+    if (this.enabledVulnerabilityTypes.sqli) {
+      this.detectSQLInjection();
+    }
+    
+    if (this.enabledVulnerabilityTypes.csrf) {
+      this.detectCSRF();
+    }
+    
+    if (this.enabledVulnerabilityTypes.infoLeakage) {
+      this.detectInfoLeakage();
+    }
+    
+    // 比较当前状态与初始状态
+    const currentState = this.captureState();
+    this.checkStateChanges(initialState, currentState, window.location.href);
+  }
+  
+  // 检测XSS漏洞的方法
+  detectXSS() {
+    // 检查URL中的参数是否被反射
+    const urlParams = new URLSearchParams(window.location.search);
+    for (const [name, value] of urlParams) {
+      // 检查参数值是否被直接反射到页面
+      if (document.body.innerHTML.includes(value)) {
+        // 尝试确认XSS漏洞
+        this.confirmXSSVulnerability(name);
+      }
+    }
+    
+    // 检查DOM中可能的XSS向量
+    const inputs = document.querySelectorAll('input, textarea');
+    inputs.forEach(input => {
+      // 仅在主动模式下测试输入字段
+      if (this.detectionMode !== 'passive') {
+        this.testXSSVector(input);
+      }
+    });
+  }
+  
+  // 确认XSS漏洞
+  confirmXSSVulnerability(paramName) {
+    if (this.detectionMode === 'passive') {
+      // 被动模式：只报告可能存在漏洞
+      this.recordVulnerability('XSS', {
+        evidence: `URL参数 "${paramName}" 被反射到页面`,
+        location: window.location.href,
+        severity: 'Medium',
+        description: '参数被反射到页面，可能存在XSS漏洞。'
+      });
+      return;
+    }
+    
+    // 主动模式：尝试验证漏洞
+    const testValue = `xsstest${Math.floor(Math.random() * 10000)}`;
+    
+    // 安全地测试XSS（不使用实际的XSS载荷）
+    const currentUrl = new URL(window.location.href);
+    currentUrl.searchParams.set(paramName, testValue);
+    
+    // 使用fetch API安全测试
+    fetch(currentUrl.toString())
+      .then(response => response.text())
+      .then(html => {
+        if (html.includes(testValue)) {
+          this.recordVulnerability('XSS', {
+            evidence: `URL参数 "${paramName}" 被直接反射到页面，未经过滤`,
+            location: window.location.href,
+            severity: 'High',
+            description: '参数值被直接插入页面内容，可能导致XSS攻击。'
+          });
+        }
+      })
+      .catch(error => console.error('测试XSS漏洞时出错:', error));
+  }
+  
+  // 测试输入字段的XSS向量
+  testXSSVector(input) {
+    // 保存原始值
+    const originalValue = input.value;
+    
+    // 仅在主动或深度模式下执行
+    if (this.detectionMode === 'active' || this.detectionMode === 'aggressive') {
+      // 测试值
+      const testValue = `xsstest${Math.floor(Math.random() * 10000)}`;
+      
+      // 修改输入值
+      input.value = testValue;
+      
+      // 触发事件
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      
+      // 如果有相关的表单，尝试拦截提交
+      const form = input.closest('form');
+      if (form) {
+        const originalSubmit = form.submit;
+        form.submit = () => {
+          console.log('[漏洞检测] 拦截表单提交');
+          // 恢复原始值和submit方法
+          input.value = originalValue;
+          form.submit = originalSubmit;
+        };
+      }
+      
+      // 恢复原始值
+      setTimeout(() => {
+        input.value = originalValue;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      }, 100);
+    }
+  }
+  
+  // 检测SQL注入漏洞
+  detectSQLInjection() {
+    // 仅在启用SQL注入检测时执行
+    if (!this.enabledVulnerabilityTypes.sqli) {
+      return;
+    }
+    
+    // 查找表单和输入字段
+    const forms = document.querySelectorAll('form');
+    
+    // 检查URL中的参数是否可能导致SQL错误
+    const urlParams = new URLSearchParams(window.location.search);
+    for (const [name, value] of urlParams) {
+      // 检查特定参数类型（ID, user, search等）
+      if (name.toLowerCase().includes('id') || 
+          name.toLowerCase().includes('user') || 
+          name.toLowerCase().includes('search')) {
+        // 在主动模式下测试SQL注入
+        if (this.detectionMode !== 'passive') {
+          this.testSQLInjectionVector(name, 'url');
+        }
+      }
+    }
+    
+    // 在主动模式下测试表单
+    if (this.detectionMode !== 'passive') {
+      forms.forEach(form => {
+        const inputs = form.querySelectorAll('input[type="text"], input[type="search"], input:not([type])');
+        inputs.forEach(input => {
+          // 特别关注可能与数据库交互的字段
+          if (input.name.toLowerCase().includes('id') || 
+              input.name.toLowerCase().includes('user') || 
+              input.name.toLowerCase().includes('search') ||
+              input.name.toLowerCase().includes('query')) {
+            this.testSQLInjectionVector(input.name, 'form', input);
+          }
+        });
+      });
+    }
+  }
+  
+  // 测试SQL注入向量
+  testSQLInjectionVector(paramName, sourceType, inputElement = null) {
+    // 仅在指定的检测深度和模式下执行更详细的测试
+    if (this.detectionDepth < 2 || this.detectionMode === 'passive') {
+      return;
+    }
+    
+    // SQL注入测试值（基于检测深度选择）
+    const testValue = this.sqlInjectionPayloads[this.detectionDepth - 1] || this.sqlInjectionPayloads[0];
+    
+    if (sourceType === 'url') {
+      // 测试URL参数
+      const currentUrl = new URL(window.location.href);
+      const originalValue = currentUrl.searchParams.get(paramName);
+      
+      // 仅在深度模式下发送请求
+      if (this.detectionMode === 'aggressive') {
+        currentUrl.searchParams.set(paramName, testValue);
+        
+        // 使用fetch API安全测试
+        fetch(currentUrl.toString())
+          .then(response => response.text())
+          .then(html => {
+            // 检查是否有SQL错误指示
+            for (const signature of this.vulnerabilitySignatures.sqli) {
+              if (html.includes(signature)) {
+                this.recordVulnerability('SQL注入', {
+                  evidence: `URL参数 "${paramName}" 触发SQL错误: ${signature}`,
+                  location: window.location.href,
+                  severity: 'Critical',
+                  description: 'URL参数可能存在SQL注入漏洞，返回内容包含数据库错误。'
+                });
+                break;
+              }
+            }
+          })
+          .catch(error => console.error('测试SQL注入漏洞时出错:', error));
+      }
+    } else if (sourceType === 'form' && inputElement) {
+      // 测试表单输入
+      const originalValue = inputElement.value;
+      
+      // 仅在深度模式下模拟表单提交
+      if (this.detectionMode === 'aggressive') {
+        // 标记此表单已被测试，避免重复
+        const form = inputElement.closest('form');
+        if (form && !form.dataset.sqlTested) {
+          form.dataset.sqlTested = 'true';
+          
+          // 保存原始submit方法
+          const originalSubmit = form.submit;
+          
+          // 替换submit方法以拦截提交
+          form.submit = () => {
+            console.log('[漏洞检测] 拦截表单提交以测试SQL注入');
+            
+            // 恢复原始值和submit方法
+            inputElement.value = originalValue;
+            form.submit = originalSubmit;
+          };
+          
+          // 设置测试值
+          inputElement.value = testValue;
+          
+          // 触发事件
+          inputElement.dispatchEvent(new Event('input', { bubbles: true }));
+          inputElement.dispatchEvent(new Event('change', { bubbles: true }));
+          
+          // 恢复原始值
+          setTimeout(() => {
+            inputElement.value = originalValue;
+            inputElement.dispatchEvent(new Event('input', { bubbles: true }));
+            inputElement.dispatchEvent(new Event('change', { bubbles: true }));
+          }, 200);
+        }
+      }
+    }
+  }
+  
+  // 检测敏感信息泄露
+  detectInfoLeakage() {
+    // 仅在启用敏感信息泄露检测时执行
+    if (!this.enabledVulnerabilityTypes.infoLeakage) {
+      return;
+    }
+    
+    // 获取页面内容
+    const pageContent = document.documentElement.outerHTML;
+    
+    // 检查敏感信息
+    this.checkSensitiveInfoLeakage(window.location.href, pageContent);
+  }
+  
+  // 检测CSRF漏洞
+  detectCSRF() {
+    // 仅在启用CSRF检测时执行
+    if (!this.enabledVulnerabilityTypes.csrf) {
+      return;
+    }
+    
+    // 查找所有表单
+    const forms = document.querySelectorAll('form');
+    
+    forms.forEach(form => {
+      if (form.method.toLowerCase() === 'post') {
+        // 检查是否有CSRF令牌
+        const hasCSRFToken = this.checkForCSRFToken(form);
+        
+        if (!hasCSRFToken) {
+          this.recordVulnerability('CSRF', {
+            evidence: `表单缺少CSRF令牌: ${form.outerHTML.substring(0, 200)}...`,
+            location: window.location.href,
+            severity: 'Medium',
+            description: '发现POST表单没有CSRF保护措施，可能导致跨站请求伪造攻击。'
+          });
+        }
+      }
+    });
+  }
+  
+  // 检查表单是否有CSRF令牌
+  checkForCSRFToken(form) {
+    const inputs = form.querySelectorAll('input[type="hidden"]');
+    
+    // 检查是否有隐藏字段包含csrf/token/nonce等关键词
+    for (const input of inputs) {
+      const name = input.name.toLowerCase();
+      if (name.includes('csrf') || 
+          name.includes('token') || 
+          name.includes('nonce') || 
+          name.includes('verify')) {
+        return true;
+      }
+    }
+    
+    return false;
   }
   
   // 安全地发送消息
@@ -1358,7 +2296,7 @@ class VulnerabilityDetector {
     try {
       if (chrome && chrome.runtime && chrome.runtime.sendMessage) {
         chrome.runtime.sendMessage(message, callback || function() {});
-    } else {
+      } else {
         console.warn('chrome.runtime.sendMessage 不可用');
         if (callback) callback({error: 'chrome.runtime.sendMessage 不可用'});
       }
@@ -1370,26 +2308,139 @@ class VulnerabilityDetector {
   
   // 记录漏洞
   recordVulnerability(type, details) {
-    // 记录漏洞信息
-    const vulnerabilityData = {
-      type,
-      details: {
-        ...details,
-        location: window.location.href,
-      timestamp: new Date().toISOString()
-      },
-      timestamp: Date.now()
+    try {
+      // 确保details是一个对象
+      if (!details || typeof details !== 'object') {
+        details = {};
+      }
+      
+      // 添加严重程度，如果没有指定
+      if (!details.severity) {
+        details.severity = this.determineSeverity(type);
+      }
+      
+      // 添加时间戳，如果没有指定
+      if (!details.timestamp) {
+        details.timestamp = new Date().toISOString();
+      }
+      
+      // 确保location存在
+      if (!details.location) {
+        details.location = window.location.href;
+      }
+      
+      // 检查是否重复
+      const isDuplicate = this.foundVulnerabilities.some(v => 
+        v.type === type && 
+        v.details.location === details.location &&
+        (v.details.evidence === details.evidence || 
+         (v.details.evidence && details.evidence && 
+          this.similarityScore(v.details.evidence, details.evidence) > 0.8))
+      );
+      
+      if (isDuplicate) {
+        return null; // 避免重复报告
+      }
+      
+      // 记录漏洞信息
+      const vulnerabilityData = {
+        id: `vuln_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+        type,
+        details: {
+          ...details,
+          location: details.location
+        },
+        timestamp: Date.now()
+      };
+      
+      // 添加到本地列表
+      this.foundVulnerabilities.push(vulnerabilityData);
+      
+      // 发送到后台脚本
+      try {
+        this.safeSendMessage({
+          action: 'vulnerabilityDetected',  // 正确的消息类型
+          vulnerability: vulnerabilityData
+        }, response => {
+          if (response && response.error) {
+            console.error(`发送漏洞信息失败: ${response.error}`);
+          }
+        });
+      } catch (msgError) {
+        console.error('向后台发送漏洞数据时出错:', msgError);
+      }
+      
+      console.log(`[漏洞检测] 发现${type}漏洞:`, details);
+      
+      return vulnerabilityData;
+    } catch (error) {
+      console.error('记录漏洞数据时出错:', error);
+      return null;
+    }
+  }
+  
+  // 计算两个字符串的相似度（简单实现）
+  similarityScore(str1, str2) {
+    // 如果字符串为空或null，返回0
+    if (!str1 || !str2) return 0;
+    
+    // 将两个字符串转为小写，并截取前100个字符（避免过长）
+    const s1 = str1.toLowerCase().substring(0, 100);
+    const s2 = str2.toLowerCase().substring(0, 100);
+    
+    // 如果字符串完全相同，返回1
+    if (s1 === s2) return 1;
+    
+    // 计算最长公共子序列
+    let longer = s1.length > s2.length ? s1 : s2;
+    let shorter = s1.length > s2.length ? s2 : s1;
+    
+    // 计算编辑距离
+    const editDistance = (a, b) => {
+      const matrix = [];
+      
+      // 初始化矩阵
+      for (let i = 0; i <= a.length; i++) {
+        matrix[i] = [i];
+      }
+      
+      for (let j = 0; j <= b.length; j++) {
+        matrix[0][j] = j;
+      }
+      
+      // 填充矩阵
+      for (let i = 1; i <= a.length; i++) {
+        for (let j = 1; j <= b.length; j++) {
+          if (a.charAt(i - 1) === b.charAt(j - 1)) {
+            matrix[i][j] = matrix[i - 1][j - 1];
+          } else {
+            matrix[i][j] = Math.min(
+              matrix[i - 1][j - 1] + 1, // 替换
+              matrix[i][j - 1] + 1,     // 插入
+              matrix[i - 1][j] + 1      // 删除
+            );
+          }
+        }
+      }
+      
+      return matrix[a.length][b.length];
     };
     
-    // 发送到后台脚本
-    this.safeSendMessage({
-      action: 'addVulnerability',
-      data: vulnerabilityData
-    });
+    const distance = editDistance(shorter, longer);
+    return 1 - distance / longer.length;
+  }
+  
+  // 确定漏洞的严重程度
+  determineSeverity(type) {
+    const criticalVulnerabilities = ['SQL注入', 'SSRF漏洞', 'XXE漏洞', '远程代码执行'];
+    const highVulnerabilities = ['XSS', '不安全的CORS配置', '潜在的CSRF漏洞'];
+    const mediumVulnerabilities = ['不安全的HTTP头部', '开放重定向'];
     
-    console.log(`[漏洞检测] 发现${type}漏洞:`, details);
+    if (criticalVulnerabilities.includes(type)) return 'Critical';
+    if (highVulnerabilities.includes(type)) return 'High';
+    if (mediumVulnerabilities.includes(type)) return 'Medium';
     
-    return vulnerabilityData;
+    return 'Low';
   }
 }
 
@@ -1419,6 +2470,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     
     // 发送响应
     sendResponse({ success: true, message: '已接收指纹更新通知' });
+  } else if (request.action === 'prepareVulnerabilityDetection') {
+    // 更新漏洞检测设置
+    vulnerabilityDetectionSettings = request.settings;
+    console.log('[漏洞检测] 设置已更新:', vulnerabilityDetectionSettings);
+    sendResponse({ success: true });
+    return true;
   }
   
   // 返回true表示将异步发送响应

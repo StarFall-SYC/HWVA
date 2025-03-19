@@ -24,6 +24,45 @@ class HumanoidSimulator {
     
     // 初始化TCP/IP指纹配置文件
     this.initTCPProfiles();
+
+    // 漏洞信息存储
+    this.vulnerabilities = {
+      byDomain: {},
+      byType: {
+        'XSS': [],
+        'SQL注入': [],
+        'CSRF': [],
+        'SSRF漏洞': [],
+        '敏感信息泄露': [],
+        '不安全的HTTP头部': [],
+        '不安全的CORS配置': [],
+        '开放重定向': [],
+        '其他': []
+      },
+      timestamp: Date.now(),
+      statistics: {
+        totalCount: 0,
+        domains: new Set(),
+        typeCounts: {}
+      }
+    };
+
+    // 漏洞检测设置
+    this.vulnerabilityDetectionSettings = {
+      detectionMode: 'active',
+      detectionDepth: 3,
+      vulnerabilityTypes: {
+        xss: true,
+        sqli: true,
+        csrf: true,
+        ssrf: true,
+        infoLeakage: true,
+        headers: true
+      }
+    };
+    
+    // 加载之前保存的漏洞检测设置
+    this.loadVulnerabilityDetectionSettings();
   }
 
   // 初始化TCP/IP指纹配置文件
@@ -203,141 +242,560 @@ class HumanoidSimulator {
     }
   }
   
-  // 添加发现的漏洞
+  // 添加漏洞记录 - 增强错误处理
   addVulnerability(data) {
-    // 添加timestamp和唯一ID
-    const vulnerability = {
-      ...data.vulnerability,
-      id: Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-      tabId: data.tabId
-    };
-    
-    // 避免重复漏洞（同一类型、同一URL）
-    const isDuplicate = this.detectedVulnerabilities.some(v => 
-      v.type === vulnerability.type && 
-      v.details.location === vulnerability.details.location
-    );
-    
-    if (!isDuplicate) {
-      this.detectedVulnerabilities.push(vulnerability);
+    try {
+      if (!data) {
+        console.error('添加漏洞: 数据为空');
+        return null;
+      }
+
+      const vulnerability = data.vulnerability;
+      const tabId = data.tabId || this.currentTabId;
+      
+      if (!vulnerability) {
+        console.error('添加漏洞: vulnerability对象为空');
+        return null;
+      }
+
+      if (!vulnerability.type) {
+        console.error('添加漏洞: 漏洞类型为空');
+        return null;
+      }
+      
+      // 确保vulnerabilities对象已初始化
+      if (!this.vulnerabilities) {
+        this.initEmptyVulnerabilityData();
+      }
+
+      // 确保统计信息已初始化
+      if (!this.vulnerabilities.statistics) {
+        this.vulnerabilities.statistics = {
+          totalCount: 0,
+          domains: new Set(),
+          typeCounts: {}
+        };
+      }
+      
+      // 获取漏洞的域名
+      let domain = '';
+      if (vulnerability.details && vulnerability.details.location) {
+        try {
+          const url = new URL(vulnerability.details.location);
+          domain = url.hostname;
+        } catch (e) {
+          console.error('解析漏洞URL时出错', e);
+          domain = 'unknown-domain';
+        }
+      } else {
+        domain = 'unknown-domain';
+      }
+      
+      // 如果域名不存在，则初始化
+      if (!this.vulnerabilities.byDomain) {
+        this.vulnerabilities.byDomain = {};
+      }
+      
+      if (!this.vulnerabilities.byDomain[domain]) {
+        this.vulnerabilities.byDomain[domain] = [];
+      }
+      
+      // 确保漏洞类型存在
+      if (!this.vulnerabilities.byType) {
+        this.vulnerabilities.byType = {
+          'XSS': [],
+          'SQL注入': [],
+          'CSRF': [],
+          'SSRF漏洞': [],
+          '敏感信息泄露': [],
+          '不安全的HTTP头部': [],
+          '不安全的CORS配置': [],
+          '开放重定向': [],
+          '其他': []
+        };
+      }
+      
+      if (!this.vulnerabilities.byType[vulnerability.type]) {
+        this.vulnerabilities.byType[vulnerability.type] = [];
+      }
+      
+      // 为漏洞添加额外信息
+      vulnerability.domain = domain;
+      vulnerability.tabId = tabId;
+      
+      // 添加时间戳（如果没有）
+      if (!vulnerability.timestamp) {
+        vulnerability.timestamp = Date.now();
+      }
+      
+      // 确保details对象存在
+      if (!vulnerability.details) {
+        vulnerability.details = {};
+      }
+      
+      // 添加严重程度（如果没有）
+      if (!vulnerability.details.severity) {
+        vulnerability.details.severity = this.determineSeverity(vulnerability.type);
+      }
+      
+      // 添加唯一ID（如果没有）
+      if (!vulnerability.id) {
+        vulnerability.id = `vuln_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      }
+      
+      // 检查是否重复
+      const isDuplicate = this.checkDuplicateVulnerability(vulnerability);
+      if (isDuplicate) {
+        console.log(`[漏洞检测] 忽略重复漏洞: ${vulnerability.type} at ${domain}`);
+        return null;
+      }
+      
+      // 添加到按域名索引的列表
+      this.vulnerabilities.byDomain[domain].push(vulnerability);
+      
+      // 添加到按类型索引的列表
+      this.vulnerabilities.byType[vulnerability.type].push(vulnerability);
+      
+      // 更新统计信息
+      if (!this.vulnerabilities.statistics) {
+        this.vulnerabilities.statistics = {
+          totalCount: 0,
+          domains: new Set(),
+          typeCounts: {}
+        };
+      }
+      
+      this.vulnerabilities.statistics.totalCount++;
+      
+      // 确保domains是Set对象
+      if (!this.vulnerabilities.statistics.domains) {
+        this.vulnerabilities.statistics.domains = new Set();
+      }
+      
+      // 确保是可用的Set对象
+      if (typeof this.vulnerabilities.statistics.domains.add !== 'function') {
+        this.vulnerabilities.statistics.domains = new Set();
+      }
+      
+      this.vulnerabilities.statistics.domains.add(domain);
+      
+      // 确保typeCounts对象存在
+      if (!this.vulnerabilities.statistics.typeCounts) {
+        this.vulnerabilities.statistics.typeCounts = {};
+      }
+      
+      if (!this.vulnerabilities.statistics.typeCounts[vulnerability.type]) {
+        this.vulnerabilities.statistics.typeCounts[vulnerability.type] = 0;
+      }
+      this.vulnerabilities.statistics.typeCounts[vulnerability.type]++;
+      
+      // 更新时间戳
+      this.vulnerabilities.timestamp = Date.now();
+      
+      // 存储漏洞数据
       this.saveVulnerabilities();
       
-      // 发送桌面通知
-      chrome.notifications.create({
-        type: 'basic',
-        iconUrl: 'icon128.png',
-        title: '发现潜在漏洞 - ' + vulnerability.type,
-        message: `URL: ${vulnerability.details.location.substring(0, 50)}...`,
-        priority: 2
-      });
-    }
-  }
-  
-  // 保存漏洞到本地存储
-  saveVulnerabilities() {
-    chrome.storage.local.set({
-      'vulnerabilities': this.detectedVulnerabilities
-    });
-  }
-  
-  // 加载已保存的漏洞
-  loadVulnerabilities() {
-    chrome.storage.local.get('vulnerabilities', (result) => {
-      if (result.vulnerabilities) {
-        this.detectedVulnerabilities = result.vulnerabilities;
+      // 发送通知
+      try {
+        this.notifyVulnerability(vulnerability);
+      } catch (notifyError) {
+        console.error('发送漏洞通知时出错:', notifyError);
       }
-    });
-  }
-  
-  // 导出漏洞报告
-  exportVulnerabilityReport() {
-    if (this.detectedVulnerabilities.length === 0) {
+      
+      console.log(`[漏洞检测] 添加新漏洞: ${vulnerability.type} at ${domain}`);
+      
+      // 将漏洞信息发送到报告页面
+      if (this.reportTabId) {
+        try {
+          chrome.tabs.sendMessage(this.reportTabId, {
+            action: 'updateVulnerabilities',
+            vulnerabilities: this.vulnerabilities
+          }).catch(err => {
+            console.log(`向报告页面发送更新消息失败: ${err.message || '未知错误'}`);
+          });
+        } catch (e) {
+          console.error('向报告页面发送漏洞信息时出错', e);
+        }
+      }
+      
+      return vulnerability;
+    } catch (error) {
+      console.error('添加漏洞过程中出错:', error ? (error.message || error.toString()) : '未知错误');
       return null;
     }
+  }
+
+  // 检查是否为重复漏洞
+  checkDuplicateVulnerability(newVulnerability) {
+    const domain = newVulnerability.domain;
+    const existingVulns = this.vulnerabilities.byDomain[domain] || [];
     
-    // 按照网站分组漏洞
-    const vulnByDomain = {};
-    this.detectedVulnerabilities.forEach(vuln => {
-      try {
-        const url = new URL(vuln.details.location);
-        const domain = url.hostname;
-        
-        if (!vulnByDomain[domain]) {
-          vulnByDomain[domain] = [];
-        }
-        
-        vulnByDomain[domain].push(vuln);
-      } catch (e) {
-        // 处理无效URL
-        if (!vulnByDomain['unknown']) {
-          vulnByDomain['unknown'] = [];
-        }
-        vulnByDomain['unknown'].push(vuln);
+    return existingVulns.some(existing => {
+      // 检查类型是否相同
+      if (existing.type !== newVulnerability.type) {
+        return false;
       }
+      
+      // 检查位置是否相同
+      if (existing.details.location !== newVulnerability.details.location) {
+        return false;
+      }
+      
+      // 检查证据是否类似
+      if (existing.details.evidence && newVulnerability.details.evidence) {
+        return this.similarityScore(existing.details.evidence, newVulnerability.details.evidence) > 0.8;
+      }
+      
+      return false;
     });
+  }
+  
+  // 计算两个字符串的相似度（简单实现）
+  similarityScore(str1, str2) {
+    // 如果字符串为空或null，返回0
+    if (!str1 || !str2) return 0;
     
-    // 创建报告HTML
-    let reportHtml = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <title>漏洞检测报告</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 0; padding: 20px; color: #333; }
-    h1 { color: #2c3e50; border-bottom: 2px solid #eee; padding-bottom: 10px; }
-    h2 { color: #2980b9; margin-top: 30px; }
-    h3 { color: #c0392b; }
-    .vulnerability { background: #f8f9fa; border-left: 4px solid #e74c3c; padding: 15px; margin: 15px 0; border-radius: 0 4px 4px 0; }
-    .evidence { background: #ecf0f1; padding: 10px; border-radius: 4px; font-family: monospace; }
-    .timestamp { color: #7f8c8d; font-size: 0.8em; }
-    .summary { background: #e8f4f8; padding: 15px; border-radius: 4px; margin: 20px 0; }
-  </style>
-</head>
-<body>
-  <h1>漏洞检测报告</h1>
-  <div class="summary">
-    <p>生成时间: ${new Date().toLocaleString()}</p>
-    <p>检测目标总数: ${Object.keys(vulnByDomain).length}</p>
-    <p>发现漏洞总数: ${this.detectedVulnerabilities.length}</p>
-  </div>
-`;
+    // 将两个字符串转为小写，并截取前100个字符（避免过长）
+    const s1 = str1.toLowerCase().substring(0, 100);
+    const s2 = str2.toLowerCase().substring(0, 100);
     
-    // 添加每个域的漏洞
-    for (const [domain, vulns] of Object.entries(vulnByDomain)) {
-      reportHtml += `<h2>目标: ${domain}</h2>`;
-      reportHtml += `<p>发现漏洞数: ${vulns.length}</p>`;
-      
-      // 按照漏洞类型分组
-      const vulnByType = {};
-      vulns.forEach(vuln => {
-        if (!vulnByType[vuln.type]) {
-          vulnByType[vuln.type] = [];
-        }
-        vulnByType[vuln.type].push(vuln);
-      });
-      
-      // 添加每种类型的漏洞
-      for (const [type, typeVulns] of Object.entries(vulnByType)) {
-        reportHtml += `<h3>${type} (${typeVulns.length})</h3>`;
-        
-        typeVulns.forEach(vuln => {
-          reportHtml += `
-<div class="vulnerability">
-  <p><strong>URL:</strong> ${vuln.details.location}</p>
-  <p><strong>证据:</strong></p>
-  <div class="evidence">${vuln.details.evidence}</div>
-  <p class="timestamp">发现时间: ${new Date(vuln.timestamp).toLocaleString()}</p>
-</div>`;
-        });
+    // 如果字符串完全相同，返回1
+    if (s1 === s2) return 1;
+    
+    // 计算Levenshtein距离的简化版本
+    let longer = s1;
+    let shorter = s2;
+    
+    if (s1.length < s2.length) {
+      longer = s2;
+      shorter = s1;
+    }
+    
+    // 共同字符数量
+    let commonChars = 0;
+    for (let i = 0; i < shorter.length; i++) {
+      if (longer.includes(shorter[i])) {
+        commonChars++;
       }
     }
     
-    reportHtml += `
-</body>
-</html>`;
+    return commonChars / longer.length;
+  }
+  
+  // 确定漏洞的严重程度
+  determineSeverity(type) {
+    const criticalVulnerabilities = ['SQL注入', 'SSRF漏洞', 'XXE漏洞', '远程代码执行'];
+    const highVulnerabilities = ['XSS', '不安全的CORS配置', 'CSRF', '潜在的CSRF漏洞'];
+    const mediumVulnerabilities = ['敏感信息泄露', '不安全的HTTP头部', '开放重定向'];
+    
+    if (criticalVulnerabilities.includes(type)) return 'Critical';
+    if (highVulnerabilities.includes(type)) return 'High';
+    if (mediumVulnerabilities.includes(type)) return 'Medium';
+    
+    return 'Low';
+  }
+  
+  // 发送漏洞通知
+  notifyVulnerability(vulnerability) {
+    const type = vulnerability.type;
+    const domain = vulnerability.domain;
+    const severity = vulnerability.details.severity || 'Medium';
+    
+    // 根据严重程度选择图标
+    let iconPath = "icons/icon48.png";
+    if (severity === 'Critical') {
+      iconPath = "icons/critical.png";
+    } else if (severity === 'High') {
+      iconPath = "icons/high.png";
+    } else if (severity === 'Medium') {
+      iconPath = "icons/medium.png";
+    } else if (severity === 'Low') {
+      iconPath = "icons/low.png";
+    }
+    
+    // 通知标题
+    const title = `检测到 ${severity} 级别漏洞`;
+    
+    // 通知内容
+    let message = `域名 ${domain} 存在 ${type} 漏洞`;
+    if (vulnerability.details.description) {
+      message += `\n${vulnerability.details.description}`;
+    }
+    
+    // 创建通知
+    const notificationOptions = {
+      type: 'basic',
+      iconUrl: iconPath,
+      title: title,
+      message: message,
+      priority: 2
+    };
+    
+    // 显示通知
+    const notificationId = `vuln_${Date.now()}`;
+    chrome.notifications.create(notificationId, notificationOptions);
+    
+    // 添加通知点击事件处理
+    chrome.notifications.onClicked.addListener((id) => {
+      if (id === notificationId) {
+        // 打开报告页面
+        this.openReportPage();
+      }
+    });
+  }
+  
+  // 存储漏洞数据
+  saveVulnerabilities() {
+    try {
+      // 将Set转换为数组，以便正确存储
+      const dataToSave = JSON.parse(JSON.stringify(this.vulnerabilities));
+      dataToSave.statistics.domains = Array.from(this.vulnerabilities.statistics.domains);
+      
+      chrome.storage.local.set({ 'vulnerabilities': dataToSave }, () => {
+        if (chrome.runtime.lastError) {
+          console.error('存储漏洞数据时出错:', chrome.runtime.lastError);
+        } else {
+          console.log('漏洞数据已保存');
+        }
+      });
+    } catch (error) {
+      console.error('准备漏洞数据以进行存储时出错:', error);
+    }
+  }
+  
+  // 加载漏洞数据
+  loadVulnerabilities() {
+    return new Promise((resolve) => {
+      try {
+        chrome.storage.local.get('vulnerabilities', (result) => {
+          try {
+            if (chrome.runtime.lastError) {
+              console.log('加载漏洞数据时出错:', chrome.runtime.lastError.message || '未知错误');
+              this.initEmptyVulnerabilityData();
+              resolve(false);
+              return;
+            }
+            
+            if (!result || !result.vulnerabilities) {
+              console.log('未找到存储的漏洞数据');
+              this.initEmptyVulnerabilityData();
+              resolve(false);
+              return;
+            }
+            
+            // 安全地赋值
+            this.initEmptyVulnerabilityData(); // 先初始化空数据结构
+            
+            // 然后尝试合并数据
+            try {
+              // 从存储的数据中复制简单属性
+              if (result.vulnerabilities.timestamp) {
+                this.vulnerabilities.timestamp = result.vulnerabilities.timestamp;
+              }
+              
+              // 处理byDomain
+              if (result.vulnerabilities.byDomain) {
+                this.vulnerabilities.byDomain = result.vulnerabilities.byDomain;
+              }
+              
+              // 处理byType
+              if (result.vulnerabilities.byType) {
+                this.vulnerabilities.byType = result.vulnerabilities.byType;
+              }
+              
+              // 处理统计信息
+              if (result.vulnerabilities.statistics) {
+                // 复制计数
+                if (result.vulnerabilities.statistics.totalCount !== undefined) {
+                  this.vulnerabilities.statistics.totalCount = result.vulnerabilities.statistics.totalCount;
+                }
+                
+                // 安全处理domains
+                if (result.vulnerabilities.statistics.domains) {
+                  if (Array.isArray(result.vulnerabilities.statistics.domains)) {
+                    this.vulnerabilities.statistics.domains = new Set(result.vulnerabilities.statistics.domains);
+                  } else if (result.vulnerabilities.statistics.domains instanceof Set) {
+                    this.vulnerabilities.statistics.domains = new Set(
+                      Array.from(result.vulnerabilities.statistics.domains)
+                    );
+                  }
+                }
+                
+                // 复制类型计数
+                if (result.vulnerabilities.statistics.typeCounts) {
+                  this.vulnerabilities.statistics.typeCounts = { ...result.vulnerabilities.statistics.typeCounts };
+                }
+              }
+              
+              console.log('已加载漏洞数据');
+              resolve(true);
+            } catch (innerError) {
+              console.log('处理漏洞数据时出错:', innerError ? (innerError.message || innerError.toString()) : '未知错误');
+              this.initEmptyVulnerabilityData();
+              resolve(false);
+            }
+          } catch (callbackError) {
+            console.log('在callback中处理漏洞数据时出错:', 
+              callbackError ? (callbackError.message || callbackError.toString()) : '未知错误');
+            this.initEmptyVulnerabilityData();
+            resolve(false);
+          }
+        });
+      } catch (outerError) {
+        console.log('调用chrome.storage.local.get时出错:', 
+          outerError ? (outerError.message || outerError.toString()) : '未知错误');
+        this.initEmptyVulnerabilityData();
+        resolve(false);
+      }
+    });
+  }
+  
+  // 初始化空的漏洞数据结构的辅助方法
+  initEmptyVulnerabilityData() {
+    this.vulnerabilities = {
+      byDomain: {},
+      byType: {
+        'XSS': [],
+        'SQL注入': [],
+        'CSRF': [],
+        'SSRF漏洞': [],
+        '敏感信息泄露': [],
+        '不安全的HTTP头部': [],
+        '不安全的CORS配置': [],
+        '开放重定向': [],
+        '其他': []
+      },
+      timestamp: Date.now(),
+      statistics: {
+        totalCount: 0,
+        domains: new Set(),
+        typeCounts: {}
+      }
+    };
+  }
+  
+  // 获取漏洞报告摘要
+  getVulnerabilitySummary() {
+    const summary = {
+      totalVulnerabilities: this.vulnerabilities.statistics.totalCount,
+      domains: Array.from(this.vulnerabilities.statistics.domains),
+      typeCounts: this.vulnerabilities.statistics.typeCounts,
+      severityCounts: {
+        Critical: 0,
+        High: 0,
+        Medium: 0,
+        Low: 0
+      },
+      mostVulnerableDomain: '',
+      mostCommonVulnerability: '',
+      timestamp: this.vulnerabilities.timestamp
+    };
+    
+    // 计算每个严重程度的漏洞数量
+    Object.values(this.vulnerabilities.byDomain).flat().forEach(vuln => {
+      const severity = vuln.details.severity || 'Medium';
+      summary.severityCounts[severity] = (summary.severityCounts[severity] || 0) + 1;
+    });
+    
+    // 找出漏洞最多的域名
+    let maxVulnCount = 0;
+    Object.entries(this.vulnerabilities.byDomain).forEach(([domain, vulns]) => {
+      if (vulns.length > maxVulnCount) {
+        maxVulnCount = vulns.length;
+        summary.mostVulnerableDomain = domain;
+      }
+    });
+    
+    // 找出最常见的漏洞类型
+    let maxTypeCount = 0;
+    Object.entries(this.vulnerabilities.statistics.typeCounts).forEach(([type, count]) => {
+      if (count > maxTypeCount) {
+        maxTypeCount = count;
+        summary.mostCommonVulnerability = type;
+      }
+    });
+    
+    return summary;
+  }
+  
+  // 打开报告页面
+  openReportPage() {
+    const reportUrl = chrome.runtime.getURL('report.html');
+    
+    // 检查是否已经有报告页面
+    if (this.reportTabId) {
+      // 尝试激活现有的报告标签页
+      chrome.tabs.get(this.reportTabId, (tab) => {
+        if (!chrome.runtime.lastError && tab) {
+          chrome.tabs.update(this.reportTabId, { active: true });
+        } else {
+          // 如果标签页不存在，创建新的
+          this.createReportTab(reportUrl);
+        }
+      });
+    } else {
+      // 创建新的报告标签页
+      this.createReportTab(reportUrl);
+    }
+  }
+  
+  // 创建报告标签页
+  createReportTab(reportUrl) {
+    chrome.tabs.create({ url: reportUrl }, (tab) => {
+      this.reportTabId = tab.id;
+      
+      // 监听标签页关闭
+      chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
+        if (tabId === this.reportTabId) {
+          this.reportTabId = null;
+        }
+      });
+    });
+  }
 
-    return reportHtml;
+  // 加载漏洞检测设置
+  loadVulnerabilityDetectionSettings() {
+    chrome.storage.local.get('vulnerabilitySettings', (result) => {
+      if (chrome.runtime.lastError) {
+        console.error('加载漏洞检测设置时出错:', chrome.runtime.lastError);
+        return;
+      }
+      
+      if (result.vulnerabilitySettings) {
+        this.vulnerabilityDetectionSettings = result.vulnerabilitySettings;
+        console.log('已加载漏洞检测设置:', this.vulnerabilityDetectionSettings);
+      } else {
+        console.log('使用默认漏洞检测设置');
+      }
+    });
+  }
+  
+  // 向内容脚本发送漏洞检测设置
+  sendVulnerabilityDetectionSettings(tabId) {
+    try {
+      chrome.tabs.sendMessage(tabId, {
+        action: 'prepareVulnerabilityDetection',
+        settings: this.vulnerabilityDetectionSettings
+      }).catch(err => console.error(`向标签 ${tabId} 发送漏洞检测设置时出错:`, err));
+    } catch (error) {
+      console.error('发送漏洞检测设置时出错:', error);
+    }
+  }
+  
+  // 开始模拟（修改现有方法）
+  startSimulation(tabId, options = {}) {
+    // ... existing code ...
+    
+    // 向标签页发送开始模拟命令
+    chrome.tabs.sendMessage(tabId, {
+      action: 'startSimulation',
+      options: options
+    });
+    
+    // 发送当前的漏洞检测设置
+    this.sendVulnerabilityDetectionSettings(tabId);
+    
+    // ... existing code ...
   }
 }
 
@@ -911,12 +1369,24 @@ function init() {
   // 监听来自content script的消息
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action === 'vulnerabilityDetected') {
-      // 添加漏洞
-      humanoidSimulator.addVulnerability({
-        vulnerability: message.vulnerability,
-        tabId: sender.tab.id
-      });
-      sendResponse({ success: true });
+      try {
+        // 添加漏洞
+        if (!message.vulnerability) {
+          console.error('收到的漏洞消息缺少vulnerability字段:', message);
+          sendResponse({ success: false, error: '缺少vulnerability字段' });
+          return true;
+        }
+        
+        humanoidSimulator.addVulnerability({
+          vulnerability: message.vulnerability,
+          tabId: sender.tab ? sender.tab.id : null
+        });
+        sendResponse({ success: true });
+      } catch (error) {
+        console.error('处理漏洞检测消息时出错:', error ? (error.message || error.toString()) : '未知错误');
+        sendResponse({ success: false, error: error ? error.message : '未知错误' });
+      }
+      return true;
     } else if (message.action === 'executeScript') {
       // 处理脚本执行请求
       if (sender.tab && sender.tab.id) {
@@ -1044,6 +1514,66 @@ function init() {
       humanoidSimulator.rotateTCPProfile();
       
       sendResponse({ success: true });
+    } else if (message.action === 'updateVulnerabilitySettings') {
+      // 处理漏洞检测设置更新
+      try {
+        console.log('[后台] 收到漏洞检测设置更新:', message.settings);
+        
+        // 保存设置
+        chrome.storage.local.set({ 'vulnerabilitySettings': message.settings }, () => {
+          if (chrome.runtime.lastError) {
+            console.error('保存漏洞检测设置时出错:', chrome.runtime.lastError);
+            sendResponse({ success: false, error: chrome.runtime.lastError.message });
+          } else {
+            console.log('漏洞检测设置已保存到后台');
+            
+            // 将设置传递给当前活动标签
+            chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+              if (tabs && tabs.length > 0) {
+                chrome.tabs.sendMessage(tabs[0].id, {
+                  action: 'prepareVulnerabilityDetection',
+                  settings: message.settings
+                }).catch(err => console.error('向内容脚本发送设置时出错:', err));
+              }
+            });
+            
+            sendResponse({ success: true });
+          }
+        });
+        
+        return true; // 保持消息通道打开以进行异步响应
+      } catch (error) {
+        console.error('处理漏洞检测设置更新时出错:', error);
+        sendResponse({ success: false, error: error.message });
+      }
+    } else if (message.action === 'prepareVulnerabilityDetection') {
+      // 处理准备漏洞检测
+      try {
+        console.log('[后台] 准备漏洞检测:', message.settings);
+        
+        // 保存设置以便将来使用
+        chrome.storage.local.set({ 'vulnerabilitySettings': message.settings }, () => {
+          if (chrome.runtime.lastError) {
+            console.error('保存漏洞检测设置时出错:', chrome.runtime.lastError);
+          }
+        });
+        
+        // 将设置传递给当前标签
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+          if (tabs && tabs.length > 0) {
+            chrome.tabs.sendMessage(tabs[0].id, {
+              action: 'prepareVulnerabilityDetection',
+              settings: message.settings
+            }).catch(err => console.error('向内容脚本发送设置时出错:', err));
+          }
+        });
+        
+        sendResponse({ success: true });
+        return true; // 保持消息通道打开以进行异步响应
+      } catch (error) {
+        console.error('准备漏洞检测时出错:', error);
+        sendResponse({ success: false, error: error.message });
+      }
     }
     
     // 返回true表示异步响应

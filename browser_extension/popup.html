@@ -549,6 +549,64 @@
       z-index: 2;
       background: white;
     }
+    
+    /* 漏洞检测设置样式 */
+    .vulnerability-types-container {
+      max-height: 300px;
+      overflow-y: auto;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 10px;
+      margin-bottom: 15px;
+      background-color: #f9f9f9;
+    }
+    
+    .checkbox-row {
+      display: flex;
+      align-items: flex-start;
+      margin-bottom: 10px;
+      padding: 5px 0;
+      border-bottom: 1px solid #eee;
+    }
+    
+    .checkbox-row:last-child {
+      border-bottom: none;
+    }
+    
+    .checkbox-container {
+      min-width: 120px;
+      display: flex;
+      align-items: center;
+    }
+    
+    .vulnerability-description {
+      color: #666;
+      font-size: 0.9em;
+      margin-left: 10px;
+      flex: 1;
+    }
+    
+    .settings-select {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      background-color: white;
+      font-size: 14px;
+    }
+    
+    .range-container {
+      width: 100%;
+      position: relative;
+    }
+    
+    .range-labels {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 5px;
+      color: #666;
+      font-size: 0.8em;
+    }
   </style>
 </head>
 <body>

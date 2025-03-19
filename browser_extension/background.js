@@ -524,11 +524,11 @@ class HumanoidSimulator {
     
     // 创建通知
     const notificationOptions = {
-      type: 'basic',
+        type: 'basic',
       iconUrl: iconPath,
       title: title,
       message: message,
-      priority: 2
+        priority: 2
     };
     
     // 显示通知
@@ -567,7 +567,7 @@ class HumanoidSimulator {
   loadVulnerabilities() {
     return new Promise((resolve) => {
       try {
-        chrome.storage.local.get('vulnerabilities', (result) => {
+    chrome.storage.local.get('vulnerabilities', (result) => {
           try {
             if (chrome.runtime.lastError) {
               console.log('加载漏洞数据时出错:', chrome.runtime.lastError.message || '未知错误');
@@ -1355,8 +1355,8 @@ function init() {
   // 加载已保存的漏洞
   humanoidSimulator.loadVulnerabilities();
 
-  // 初始化指纹混淆
-  initFingerprintObfuscation();
+// 初始化指纹混淆
+initFingerprintObfuscation();
   
   // 监听标签页更新
   chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
@@ -1370,18 +1370,18 @@ function init() {
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action === 'vulnerabilityDetected') {
       try {
-        // 添加漏洞
+      // 添加漏洞
         if (!message.vulnerability) {
           console.error('收到的漏洞消息缺少vulnerability字段:', message);
           sendResponse({ success: false, error: '缺少vulnerability字段' });
           return true;
         }
         
-        humanoidSimulator.addVulnerability({
-          vulnerability: message.vulnerability,
+      humanoidSimulator.addVulnerability({
+        vulnerability: message.vulnerability,
           tabId: sender.tab ? sender.tab.id : null
-        });
-        sendResponse({ success: true });
+      });
+      sendResponse({ success: true });
       } catch (error) {
         console.error('处理漏洞检测消息时出错:', error ? (error.message || error.toString()) : '未知错误');
         sendResponse({ success: false, error: error ? error.message : '未知错误' });

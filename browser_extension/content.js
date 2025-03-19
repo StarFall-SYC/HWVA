@@ -1672,10 +1672,10 @@ class VulnerabilityDetector {
       const scriptContent = node.textContent || '';
       for (const signature of this.vulnerabilitySignatures.xss) {
         if (scriptContent.includes(signature)) {
-          this.recordVulnerability('XSS', {
+        this.recordVulnerability('XSS', {
             evidence: `检测到可疑脚本: ${scriptContent.substring(0, 100)}...`,
             element: node.outerHTML,
-            severity: 'High',
+          severity: 'High',
             description: '页面中插入了可疑的脚本代码，可能是XSS攻击的结果。'
           });
           return;
@@ -1691,7 +1691,7 @@ class VulnerabilityDetector {
             this.recordVulnerability('XSS', {
               evidence: `检测到可疑事件处理程序: ${node.outerHTML}`,
               element: node.outerHTML,
-              severity: 'High',
+        severity: 'High',
               description: '元素包含可疑的内联事件处理程序，可能是XSS攻击的结果。'
             });
             return;
@@ -1881,10 +1881,10 @@ class VulnerabilityDetector {
     const phones = content.match(phoneRegex);
     
     if (phones && phones.length > 0) {
-      this.recordVulnerability('敏感信息泄露', {
+        this.recordVulnerability('敏感信息泄露', {
         evidence: `检测到可能的手机号码: ${phones[0].substring(0, 3)}****${phones[0].substring(phones[0].length - 4)}`,
         location: url,
-        severity: 'Medium',
+          severity: 'Medium',
         description: '页面中包含疑似手机号码，这是敏感的个人信息。'
       });
     }
@@ -1914,7 +1914,7 @@ class VulnerabilityDetector {
       if (matches && matches.length > 0) {
         this.recordVulnerability('敏感信息泄露', {
           evidence: `检测到可能的API密钥: ${matches[0]}`,
-          location: url,
+              location: url,
           severity: 'Critical',
           description: '页面中包含可能的API密钥，这可能导致严重的安全问题。'
         });
@@ -1962,7 +1962,7 @@ class VulnerabilityDetector {
         this.recordVulnerability('潜在的CSRF漏洞', {
           evidence: `在请求后${storageName}中的认证数据发生变化: ${authKeys.join(', ')}`,
           location: url,
-          severity: 'High',
+                  severity: 'High',
           description: `请求导致${storageName}中的认证数据发生变化，但可能没有正确的CSRF保护。`
         });
       }
@@ -2044,11 +2044,11 @@ class VulnerabilityDetector {
       // 被动模式：只报告可能存在漏洞
       this.recordVulnerability('XSS', {
         evidence: `URL参数 "${paramName}" 被反射到页面`,
-        location: window.location.href,
+          location: window.location.href,
         severity: 'Medium',
         description: '参数被反射到页面，可能存在XSS漏洞。'
-      });
-      return;
+        });
+        return;
     }
     
     // 主动模式：尝试验证漏洞
@@ -2116,9 +2116,9 @@ class VulnerabilityDetector {
   detectSQLInjection() {
     // 仅在启用SQL注入检测时执行
     if (!this.enabledVulnerabilityTypes.sqli) {
-      return;
-    }
-    
+        return;
+      }
+      
     // 查找表单和输入字段
     const forms = document.querySelectorAll('form');
     
@@ -2181,8 +2181,8 @@ class VulnerabilityDetector {
               if (html.includes(signature)) {
                 this.recordVulnerability('SQL注入', {
                   evidence: `URL参数 "${paramName}" 触发SQL错误: ${signature}`,
-                  location: window.location.href,
-                  severity: 'Critical',
+          location: window.location.href,
+          severity: 'Critical',
                   description: 'URL参数可能存在SQL注入漏洞，返回内容包含数据库错误。'
                 });
                 break;
@@ -2288,9 +2288,9 @@ class VulnerabilityDetector {
       }
     }
     
-    return false;
-  }
-  
+      return false;
+    }
+    
   // 安全地发送消息
   safeSendMessage(message, callback) {
     try {

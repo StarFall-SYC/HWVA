@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Humanoid Web Vulnerability Assistant",
-  "version": "1.1.0",
+  "version": "1.0.0",
   "description": "模拟人类行为的网站漏洞检测助手，合规实现多目标网站漏洞检测",
   "permissions": [
     "activeTab", 

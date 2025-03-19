@@ -173,8 +173,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const vulnerabilitiesContainer = safeGetElement('vulnerabilities-list');
   const filterType = safeGetElement('type-filter');
   const filterDomain = safeGetElement('domain-filter');
-  const exportButton = safeGetElement('export-report');
-  const clearButton = safeGetElement('clear-data');
+  const exportMarkdownButton = safeGetElement('export-markdown');
+  const exportCSVButton = safeGetElement('export-csv');
   const prevButton = safeGetElement('prev-page');
   const nextButton = safeGetElement('next-page');
   const currentPageSpan = safeGetElement('current-page-num');
@@ -198,23 +198,56 @@ document.addEventListener('DOMContentLoaded', () => {
   // 注册事件监听
   safeAddEventListener(filterType, 'change', filterVulnerabilities);
   safeAddEventListener(filterDomain, 'change', filterVulnerabilities);
-  safeAddEventListener(exportButton, 'click', exportReport);
+  safeAddEventListener(exportMarkdownButton, 'click', () => {
+    safeSendMessage({action: 'exportReport'}, (response) => {
+      if (response && response.report) {
+        // 创建下载链接
+        const blob = new Blob([response.report], { type: 'text/markdown' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `漏洞报告_${new Date().toISOString().split('T')[0]}.md`;
+        document.body.appendChild(a);
+        a.click();
+        
+        // 清理
+        setTimeout(() => {
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }, 100);
+        
+        showErrorMessage('报告导出成功', 'success', 3000);
+      } else {
+        showErrorMessage('生成报告失败', 'error', 3000);
+      }
+    });
+  });
   
-  // 添加CSV导出按钮
-  const exportCSVButton = document.createElement('button');
-  exportCSVButton.id = 'export-csv';
-  exportCSVButton.className = 'secondary';
-  exportCSVButton.textContent = '导出CSV';
+  safeAddEventListener(exportCSVButton, 'click', () => {
+    safeSendMessage({action: 'exportCSV'}, (response) => {
+      if (response && response.csv) {
+        // 创建下载链接
+        const blob = new Blob([response.csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `漏洞数据_${new Date().toISOString().split('T')[0]}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        
+        // 清理
+        setTimeout(() => {
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }, 100);
+        
+        showErrorMessage('数据导出成功', 'success', 3000);
+      } else {
+        showErrorMessage('导出数据失败', 'error', 3000);
+      }
+    });
+  });
   
-  // 将按钮插入到导出报告按钮旁边
-  if (exportButton && exportButton.parentNode) {
-    exportButton.parentNode.insertBefore(exportCSVButton, exportButton.nextSibling);
-  }
-  
-  // 为CSV导出按钮添加事件监听
-  safeAddEventListener(exportCSVButton, 'click', exportAsCSV);
-  
-  safeAddEventListener(clearButton, 'click', clearData);
   safeAddEventListener(prevButton, 'click', () => navigatePage(-1));
   safeAddEventListener(nextButton, 'click', () => navigatePage(1));
   
@@ -313,6 +346,9 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // 更新站点分析页面
             updateDomainAnalysis();
+            
+            // 检查并确保域名列表容器正常显示
+            checkDomainContainers();
             
             // 提取所有漏洞URL的域名，确保我们有域名数据
             const extractedDomains = new Set();
@@ -2026,7 +2062,6 @@ document.addEventListener('DOMContentLoaded', () => {
   // 刷新所有图表
   function refreshAllCharts() {
     try {
-      // 使用函数存在性检查来避免错误
       if (typeof drawVulnerabilityChart === 'function') {
         drawVulnerabilityChart();
       }
@@ -2177,6 +2212,21 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
   
+  // 初始化标签页切换功能
+  function initTabs() {
+    // 现在只有一个标签页，不需要切换功能
+    console.log('初始化仪表盘页面');
+    
+    // 确保仪表盘是活动的
+    const dashboard = document.getElementById('dashboard');
+    if (dashboard) {
+      dashboard.classList.add('active');
+      console.log('仪表盘已激活');
+    } else {
+      console.warn('找不到仪表盘内容');
+    }
+  }
+
   // 初始化页面
   function initPage() {
     try {
@@ -2222,53 +2272,6 @@ document.addEventListener('DOMContentLoaded', () => {
       console.error('初始化页面时出错:', error);
       showErrorMessage('初始化页面时出错: ' + (error.message || '未知错误'));
     }
-  }
-  
-  // 初始化标签页切换功能
-  function initTabs() {
-    const tabs = document.querySelectorAll('.tab');
-    const tabContents = document.querySelectorAll('.tab-content');
-    
-    console.log('初始化标签页 - 找到标签数量:', tabs.length);
-    console.log('初始化标签页 - 找到内容区域数量:', tabContents.length);
-    
-    tabs.forEach(tab => {
-      tab.addEventListener('click', () => {
-        const tabId = tab.getAttribute('data-tab');
-        console.log('点击标签:', tabId);
-        
-        // 移除所有标签的活动状态
-        tabs.forEach(t => t.classList.remove('active'));
-        
-        // 激活当前标签
-        tab.classList.add('active');
-        
-        // 隐藏所有标签内容
-        tabContents.forEach(content => {
-          content.classList.remove('active');
-          console.log('标签内容ID:', content.id);
-        });
-        
-        // 显示当前标签内容
-        const activeContent = document.getElementById(tabId);
-        console.log('要激活的内容元素:', activeContent ? activeContent.id : '未找到');
-        
-        if (activeContent) {
-          activeContent.classList.add('active');
-          console.log(tabId + ' 标签页已激活');
-          
-          // 如果点击的是域名标签，确保更新域名分析
-          if (tabId === 'domains') {
-            console.log('触发域名分析更新');
-            // 检查域名列表容器是否存在
-            checkDomainContainers();
-            updateDomainAnalysis();
-          }
-        } else {
-          console.warn(`找不到ID为 ${tabId} 的标签内容`);
-        }
-      });
-    });
   }
 
   // 初始化图表按钮事件

@@ -601,9 +601,9 @@
     
     #domain-details {
       flex: 1;
-      max-height: 500px;
+      max-height: 600px;
       overflow-y: auto;
-      padding: var(--spacing-sm);
+      padding: 10px;
     }
     
     #domain-vulnerabilities h2 {
@@ -813,10 +813,24 @@
   <!-- 站点分析页面的样式 -->
   <style>
     /* 站点分析布局 */
-    #domains {
+    #domains-section {
       display: flex;
       gap: 20px;
       padding: 15px;
+      margin-top: 30px;
+      background-color: #ffffff;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      border: 1px solid #dadce0;
+    }
+    
+    /* 适应整合后的布局 */
+    #dashboard h2 {
+      margin-top: 30px;
+      margin-bottom: 15px;
+      color: #202124;
+      border-bottom: 1px solid #dadce0;
+      padding-bottom: 10px;
     }
     
     .domain-list {
@@ -923,36 +937,6 @@
       background-color: #7f8c8d;
     }
     
-    /* 严重程度徽章样式 */
-    .severity-badge {
-      display: inline-block;
-      padding: 2px 8px;
-      border-radius: 4px;
-      font-size: 12px;
-      color: white;
-      font-weight: 500;
-    }
-    
-    .severity-badge.critical {
-      background-color: #9c27b0;
-    }
-    
-    .severity-badge.high {
-      background-color: #e74c3c;
-    }
-    
-    .severity-badge.medium {
-      background-color: #f39c12;
-    }
-    
-    .severity-badge.low {
-      background-color: #3498db;
-    }
-    
-    .severity-badge.info {
-      background-color: #7f8c8d;
-    }
-    
     /* 漏洞详情样式 */
     #domain-vulnerabilities h2 {
       margin-top: 0;
@@ -1032,17 +1016,14 @@
             <span class="material-symbols-outlined">dashboard</span>
             仪表盘
           </div>
-          <div class="tab" data-tab="vulnerabilities">
-            <span class="material-symbols-outlined">bug_report</span>
-            漏洞列表
-          </div>
-          <div class="tab" data-tab="domains">
-            <span class="material-symbols-outlined">language</span>
-            站点分析
-          </div>
         </div>
         
         <div id="dashboard" class="tab-content active">
+          <div class="controls">
+            <div class="filters">
+            </div>
+          </div>
+
           <div class="summary">
             <h2>总体概览</h2>
             <div class="summary-grid">
@@ -1127,68 +1108,18 @@
               </div>
             </div>
           </div>
-        </div>
-        
-        <div id="vulnerabilities" class="tab-content">
-          <div class="controls">
-            <div class="filters">
-              <select id="type-filter">
-                <option value="">所有漏洞类型</option>
-                <option value="XSS">XSS</option>
-                <option value="SQL Injection">SQL注入</option>
-                <option value="CSRF">CSRF</option>
-                <option value="Information Leak">信息泄露</option>
-                <option value="Unsafe HTTP Header">不安全的HTTP头</option>
-              </select>
-              
-              <select id="domain-filter">
-                <option value="">所有域名</option>
-              </select>
+
+          <!-- 站点分析部分 -->
+          <h2>站点分析</h2>
+          <div id="domains-section" class="domain-section">
+            <div class="domain-list" id="domain-list">
+              <!-- 这里将动态填充域名项 -->
             </div>
             
-            <div class="export-options">
-              <button id="export-report">
-                <span class="material-symbols-outlined">download</span>
-                导出报告
-              </button>
-              <div class="export-dropdown">
-                <a href="#" id="export-markdown">
-                  <span class="material-symbols-outlined">description</span>
-                  导出为Markdown
-                </a>
-                <a href="#" id="export-csv">
-                  <span class="material-symbols-outlined">table_view</span>
-                  导出为CSV
-                </a>
-                <a href="#" id="export-pdf">
-                  <span class="material-symbols-outlined">picture_as_pdf</span>
-                  导出为PDF
-                </a>
-                <a href="#" id="export-json">
-                  <span class="material-symbols-outlined">data_object</span>
-                  导出为JSON
-                </a>
+            <div id="domain-details">
+              <div id="domain-vulnerabilities" class="vulnerabilities">
+                <!-- 这里将动态填充特定域名的漏洞项 -->
               </div>
-            </div>
-          </div>
-          
-          <div class="export-message">
-            <div class="no-data">
-              <span class="material-symbols-outlined" style="font-size: 48px; margin-bottom: 15px;">description</span>
-              <h3>导出漏洞报告</h3>
-              <p>使用上方的导出按钮将漏洞数据导出为多种格式</p>
-            </div>
-          </div>
-        </div>
-        
-        <div id="domains" class="tab-content">
-          <div class="domain-list" id="domain-list">
-            <!-- 这里将动态填充域名项 -->
-          </div>
-          
-          <div id="domain-details">
-            <div id="domain-vulnerabilities" class="vulnerabilities">
-              <!-- 这里将动态填充特定域名的漏洞项 -->
             </div>
           </div>
         </div>
@@ -1199,6 +1130,69 @@
       <p>© 2023 Humanoid Web Vulnerability Assistant - 版本 1.2.0</p>
     </footer>
   </div>
+
+  <!-- 悬浮导出按钮 -->
+  <div class="floating-export-buttons">
+    <button id="export-markdown" class="export-button">
+      <span class="material-symbols-outlined">description</span>
+      导出完整漏洞报告 (Markdown格式)
+    </button>
+    <button id="export-csv" class="export-button">
+      <span class="material-symbols-outlined">table_view</span>
+      导出漏洞数据表格 (CSV格式)
+    </button>
+  </div>
+
+  <!-- 添加悬浮按钮样式 -->
+  <style>
+    .floating-export-buttons {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      z-index: 1000;
+    }
+
+    .export-button {
+      padding: 12px 20px;
+      background-color: var(--primary-color);
+      color: white;
+      border: none;
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: var(--shadow-lg);
+      transition: all 0.3s ease;
+      min-width: 280px;
+    }
+
+    .export-button:hover {
+      transform: translateY(-2px);
+      background-color: var(--primary-dark);
+    }
+
+    .export-button .material-symbols-outlined {
+      font-size: 20px;
+    }
+
+    @media (max-width: 768px) {
+      .floating-export-buttons {
+        bottom: 10px;
+        right: 10px;
+      }
+
+      .export-button {
+        padding: 10px 15px;
+        min-width: 220px;
+        font-size: 14px;
+      }
+    }
+  </style>
   
   <!-- 打印样式 -->
   <style media="print">

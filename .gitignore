@@ -62,6 +62,7 @@ credentials.json
 *.crx
 *.pem
 *.xpi
+releases
 
 # 忽略开发过程中生成的临时文件
 browser_extension/debug/
